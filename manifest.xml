@@ -9,9 +9,9 @@ const manifest = `<?xml version="1.0" encoding="UTF-8"?>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="ChatGPT Composer"/>
   <Description DefaultValue="Compose emails with ChatGPT powered suggestions."/>
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
+  <IconUrl DefaultValue="https://v497sln.github.io/outlook-chatgpt-addin/assets/icon-32.png"/>
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://v497sln.github.io</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox"/>
@@ -22,7 +22,7 @@ const manifest = `<?xml version="1.0" encoding="UTF-8"?>
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html"/>
+    <SourceLocation DefaultValue="https://v497sln.github.io/outlook-chatgpt-addin/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteItem</Permissions>
 </OfficeApp>`;
