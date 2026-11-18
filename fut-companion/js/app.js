@@ -355,6 +355,24 @@ const VIEWS = {
   },
 };
 
+function ago(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+// Live sync: club + transfer list, run automatically after login and on app resume.
+let syncing = false;
+async function eaSyncAll(quiet = true) {
+  if (syncing || EA.state.status !== 'ready') return;
+  syncing = true;
+  try {
+    await A.eaImport(quiet);
+    await A.eaTransfers(quiet);
+    S.settings.eaLastSync = Date.now(); S.settings.eaAuto = true; persist(); render();
+    if (!quiet) toast('Synced with EA');
+  } catch (e) { toast(e.message, 'bad'); } finally { syncing = false; }
+}
+
 function eaSubmitBlock(r) {
   if (!ui.sbc.ea) return 'this challenge was not loaded from EA';
   if (EA.state.status !== 'ready') return 'your EA account is not connected';
@@ -376,9 +394,9 @@ function eaCard() {
     ${native && st.status === 'off' ? `<p class="hint">You log in on EA's own Web App page inside SquadSage. Your password goes only to EA. <b class="bad">Automating the Web App is against EA's terms and can get your account restricted or banned.</b></p>
       <button class="btn primary" data-a="eaConnect">Connect EA account</button>` : ''}
     ${native && (st.status === 'waiting' || st.status === 'opening') ? '<div class="row gap wrap"><button class="btn" data-a="eaShow">Show EA login</button><button class="btn" data-a="eaOff">Cancel</button></div>' : ''}
-    ${st.status === 'ready' || st.status === 'busy' ? `<div class="row gap wrap">
-      <button class="btn small primary" data-a="eaImport" ${busy}>Import club</button>
-      <button class="btn small" data-a="eaTransfers" ${busy}>Sync transfer list</button>
+    ${st.status === 'ready' || st.status === 'busy' ? `<p class="hint">${st.status === 'busy' ? 'Syncing with EA…' : S.settings.eaLastSync ? `Club and transfer list synced ${ago(S.settings.eaLastSync)}. Syncs again when you reopen the app.` : 'Syncing…'}</p>
+      <div class="row gap wrap">
+      <button class="btn small primary" data-a="eaSync" ${busy}>Sync now</button>
       <button class="btn small" data-a="eaRelist" ${busy}>Relist expired</button>
       <button class="btn small" data-a="eaShow">Open Web App</button>
       <button class="btn small danger" data-a="eaOff">Disconnect</button></div>` : ''}
@@ -556,12 +574,13 @@ const A = {
     });
   },
   eaShow: () => EA.show(),
-  eaOff: () => { EA.disconnect(); render(); },
+  eaOff: () => { EA.disconnect(); S.settings.eaAuto = false; persist(); render(); },
   async eaCopyLog() {
     const text = EA.state.log.map(l => `${new Date(l.at).toISOString()} [${l.kind}] ${l.msg}`).join('\n');
     try { await navigator.clipboard.writeText(text); toast('Log copied'); } catch { showText('Activity log', 'log.txt', text, 'text/plain'); }
   },
-  async eaImport() {
+  eaSync: () => eaSyncAll(false),
+  async eaImport(quiet) {
     try {
       const players = await EA.importClub();
       const keep = new Map(S.club.filter(p => p.eaId).map(p => [p.definitionId, p]));
@@ -570,10 +589,10 @@ const A = {
         return { id: `ea${p.eaId}`, ...p, count: 1, price: old?.price || 0, protected: old?.protected || false };
       });
       S.club = [...S.club.filter(p => !p.eaId), ...imported];
-      persist(); render(); toast(`Imported ${imported.length} players from EA`);
-    } catch (e) { toast(e.message, 'bad'); }
+      persist(); render(); if (!quiet) toast(`Imported ${imported.length} players from EA`);
+    } catch (e) { if (quiet) throw e; toast(e.message, 'bad'); }
   },
-  async eaTransfers() {
+  async eaTransfers(quiet) {
     try {
       const items = await EA.readTransferList();
       const byEa = new Map(S.trades.filter(t => t.eaId).map(t => [t.eaId, t]));
@@ -585,8 +604,8 @@ const A = {
         if (status === 'sold') t.soldFor = i.bid || i.bin;
         if (!byEa.has(i.eaId)) S.trades.unshift(t);
       }
-      persist(); render(); toast(`Synced ${items.length} transfer list items`);
-    } catch (e) { toast(e.message, 'bad'); }
+      persist(); render(); if (!quiet) toast(`Synced ${items.length} transfer list items`);
+    } catch (e) { if (quiet) throw e; toast(e.message, 'bad'); }
   },
   async eaRelist() {
     try { await EA.relistExpired(); await A.eaTransfers(); } catch (e) { toast(e.message, 'bad'); }
@@ -895,7 +914,15 @@ $('#modal').addEventListener('close', () => { ui.pickSlot = null; });
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 // Offline support
-document.addEventListener('deviceready', () => render());
+EA.setReadyHandler(() => eaSyncAll(true));
+document.addEventListener('deviceready', () => {
+  render();
+  // Reconnect in the background if you've connected before.
+  if (S.settings.eaAuto && EA.available()) EA.connect({ hidden: true });
+});
+document.addEventListener('resume', () => {
+  if (EA.state.status === 'ready' && Date.now() - (S.settings.eaLastSync || 0) > 3 * 60000) eaSyncAll(true);
+});
 if ('serviceWorker' in navigator && location.protocol !== 'file:' && !globalThis.__SOLVER_SRC && !window.Capacitor) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }

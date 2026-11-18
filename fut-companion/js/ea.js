@@ -19,9 +19,12 @@ export const state = { status: 'off', persona: '', log: [] }; // off | opening |
 let ref = null;
 let pollTimer = null;
 let onChange = () => {};
+let onReady = () => {};
+let showTimer = null;
 let jobSeq = 0;
 
 export function setListener(fn) { onChange = fn; }
+export function setReadyHandler(fn) { onReady = fn; }
 export function available() { return !!(window.cordova && window.cordova.InAppBrowser); }
 
 function log(msg, kind = 'info') {
@@ -123,17 +126,25 @@ async function job(body, timeoutMs = 120000) {
 }
 
 // ---------------------------------------------------------------- connection
-export function connect() {
+// hidden=true: reconnect in the background using EA's saved login. The EA page
+// only appears if EA asks you to log in again.
+export function connect({ hidden = false } = {}) {
   if (!available()) { log('EA connection only works in the Android app.', 'bad'); return; }
-  if (ref) { ref.show(); return; }
+  if (ref) { if (!hidden) ref.show(); return; }
   setStatus('opening');
   ref = window.cordova.InAppBrowser.open(WEBAPP_URL, '_blank',
-    'location=no,toolbar=yes,closebuttoncaption=Back,hidenavigationbuttons=yes,zoom=no,clearcache=no,clearsessioncache=no');
+    `location=no,toolbar=yes,closebuttoncaption=Back,hidenavigationbuttons=yes,zoom=no,clearcache=no,clearsessioncache=no,hidden=${hidden ? 'yes' : 'no'}`);
+  clearTimeout(showTimer);
+  if (hidden) {
+    showTimer = setTimeout(() => {
+      if (ref && state.status === 'waiting') { log('EA needs you to log in again.'); ref.show(); }
+    }, 20000);
+  }
   ref.addEventListener('loadstop', () => { exec(HELPER).catch(() => {}); });
   ref.addEventListener('exit', () => { ref = null; clearInterval(pollTimer); setStatus('off'); log('EA Web App closed.'); });
   ref.addEventListener('loaderror', e => log(`Could not load EA Web App: ${e.message || 'network error'}`, 'bad'));
   setStatus('waiting');
-  log('Log in to the EA Web App. SquadSage never sees your password.');
+  log(hidden ? 'Reconnecting to EA…' : 'Log in to the EA Web App. SquadSage never sees your password.');
   clearInterval(pollTimer);
   pollTimer = setInterval(checkLogin, 2000);
 }
@@ -151,14 +162,17 @@ async function checkLogin() {
     if (r.cmd === 'back' && ref) ref.hide();
     if (r.ready && state.status === 'waiting') {
       state.persona = r.name;
+      clearTimeout(showTimer);
+      if (ref) ref.hide();
       setStatus('ready');
-      log(`Connected as ${r.name}. Tap "Back to SquadSage" at the bottom of EA's page.`, 'good');
+      log(`Connected as ${r.name}.`, 'good');
+      Promise.resolve().then(onReady).catch(() => {});
     }
   } catch { /* page still loading */ }
 }
 
 export function show() { if (ref) ref.show(); else connect(); }
-export function disconnect() { if (ref) ref.close(); ref = null; clearInterval(pollTimer); state.persona = ''; setStatus('off'); }
+export function disconnect() { if (ref) ref.close(); ref = null; clearInterval(pollTimer); clearTimeout(showTimer); state.persona = ''; setStatus('off'); }
 
 async function guarded(label, fn) {
   if (state.status !== 'ready') throw new Error('Connect your EA account first.');
