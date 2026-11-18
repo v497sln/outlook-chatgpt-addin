@@ -244,3 +244,31 @@ html, body { overflow-x: hidden; }
 .ealog li { color: var(--muted); }
 .ealog li.good { color: var(--good); } .ealog li.bad { color: var(--bad); }
 .ealog time { font-variant-numeric: tabular-nums; opacity: .7; margin-right: 6px; }
+
+/* live mode */
+.pill:empty { display: none; }
+.small { font-size: 13px; }
+.login { min-height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; padding-block: 24px; }
+.login img { border-radius: 18px; }
+.login h1 { margin: 0; font-size: 24px; text-wrap: balance; }
+.login p { margin: 0; max-width: 34ch; }
+.login .wide { min-width: 240px; font-size: 16px; }
+.login .warnline { color: var(--muted); max-width: 36ch; }
+.login .ealog { align-self: stretch; text-align: left; }
+.spin.big { width: 28px; height: 28px; border-width: 3px; color: var(--accent); }
+.acct { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding-block: 18px 6px; }
+.acct small { display: block; }
+.acct b { font-size: 20px; }
+.acct .coins { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.syncbar { display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 600; margin: 8px 0 10px; }
+.actions { margin-top: 14px; }
+.foot { margin-top: 22px; }
+.practice { margin: 14px 0; }
+.practice > summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
+.practice .chips { margin-top: 8px; }
+.sets { gap: 8px; }
+.set .li-main { width: 100%; }
+.set > .li { display: block; }
+.set.open > .li { border-color: var(--accent); }
+.chs { list-style: none; padding: 6px 0 0 14px; margin: 0; display: grid; gap: 6px; }
+.chs .li { display: block; }

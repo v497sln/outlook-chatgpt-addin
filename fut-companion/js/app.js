@@ -137,6 +137,7 @@ function select(name, options, current, attrs = '') {
 // ---------------------------------------------------------------- views
 const VIEWS = {
   home() {
+    if (EA.available()) return liveHome();
     const c = clubStats();
     const t = tradeStats();
     const empty = !S.club.length;
@@ -209,13 +210,14 @@ const VIEWS = {
 
     return `
       ${eaSbcBar()}
-      <h2 class="sec first">Pick a challenge</h2>
+      ${EA.available() ? '<details class="practice"><summary>Practice templates and your own SBCs</summary>' : '<h2 class="sec first">Pick a challenge</h2>'}
       <div class="chips">
         ${TEMPLATES.map(t => `<button class="chip ${s.from === t.id ? 'on' : ''}" data-a="tpl" data-id="${t.id}">${h(t.name)}</button>`).join('')}
         ${saved.map(t => `<span class="chip-wrap"><button class="chip mine ${s.from === t.id ? 'on' : ''}" data-a="tpl" data-id="${t.id}">★ ${h(t.name)}</button><button class="chip-x" data-a="delSbc" data-id="${t.id}" aria-label="Delete ${h(t.name)}">×</button></span>`).join('')}
       </div>
+      ${EA.available() ? '</details>' : ''}
 
-      <div class="panel">
+      <div class="panel" id="solver">
         <div class="grid2">
           <label>Name<input data-in="sbc.name" value="${h(s.name)}"></label>
           <label>Formation${s.custom ? `<input value="EA squad: ${h(s.custom.slots.map(x => x.pos).join(' '))}" disabled>` : select('sbc.formation', Object.keys(FORMATIONS), s.formation)}</label>
@@ -286,14 +288,14 @@ const VIEWS = {
     return `
       <div class="row between center first">
         <h2 class="sec flat">My club <small class="muted">${fmt(clubStats().cards)} cards</small></h2>
-        <button class="btn small primary" data-a="editP">+ Add</button>
+        ${EA.available() ? `<span class="muted small">${S.settings.eaLastSync ? `from EA · ${ago(S.settings.eaLastSync)}` : ''}</span>` : '<button class="btn small primary" data-a="editP">+ Add</button>'}
       </div>
       <div class="toolbar">
         <input type="search" placeholder="Search name, nation, league, club, position" data-in="clubQ" value="${h(ui.clubQ)}" aria-label="Search club">
         ${select('clubFilter', [['all', 'All'], ['untradeable', 'Untradeable'], ['tradeable', 'Tradeable'], ['protected', 'Protected'], ['duplicates', 'Duplicates']], ui.clubFilter, 'aria-label="Filter"')}
         ${select('clubSort', [['rating', 'Rating'], ['name', 'Name'], ['value', 'Value']], ui.clubSort, 'aria-label="Sort"')}
       </div>
-      <div class="row gap wrap">
+      <div class="row gap wrap" ${EA.available() ? 'hidden' : ''}>
         <button class="btn small" data-a="importOpen">Import CSV</button>
         <button class="btn small" data-a="exportCsv" ${S.club.length ? '' : 'disabled'}>Export CSV</button>
         <button class="btn small" data-a="loadSample">Sample club</button>
@@ -342,12 +344,15 @@ const VIEWS = {
         ${statTile('Profit from sold items', `${t.soldProfit >= 0 ? '+' : ''}${fmt(t.soldProfit)} ${coin}`, t.soldProfit >= 0 ? 'good' : 'bad')}
       </div>
       <p class="hint">All income and profit figures are after the 5% EA transfer tax.</p>
+      ${EA.available() ? `<div class="row gap wrap"><button class="btn small primary" data-a="eaSync" ${EA.state.status === 'ready' ? '' : 'disabled'}>Refresh from EA</button><button class="btn small" data-a="eaRelist" ${EA.state.status === 'ready' ? '' : 'disabled'}>Relist expired on EA</button></div>
+      <details class="practice"><summary>Add a trade by hand</summary>` : ''}
       <form class="panel addtrade" data-form="addTrade">
         <label>Card<input name="name" required placeholder="e.g. 86 CB fodder"></label>
         <label>Bought for<input name="buy" type="number" inputmode="numeric" min="0" required></label>
         <label>List at (BIN)<input name="list" type="number" inputmode="numeric" min="150" required></label>
         <button class="btn primary">Add</button>
       </form>
+      ${EA.available() ? '</details>' : ''}
       ${sec('On the market', groups.listed)}
       ${sec('Expired / unsold', groups.unsold, groups.unsold.length ? `<span class="row gap center">${select('relistAdj', [['0', 'same price'], ['-5', '−5%'], ['-10', '−10%'], ['5', '+5%'], ['10', '+10%']], ui.relistAdj || '0', 'aria-label="Price change"')}<button class="btn small" data-a="relistAll">Relist all</button></span>` : '')}
       <p class="hint">Relisting never goes below a card's break-even price unless you set it yourself.</p>
@@ -366,8 +371,11 @@ async function eaSyncAll(quiet = true) {
   if (syncing || EA.state.status !== 'ready') return;
   syncing = true;
   try {
+    await EA.readAccount().catch(() => {});
+    render();
+    await A.eaTransfers(true).catch(e => toast(e.message, 'bad'));
+    await loadEaSets().catch(() => {});
     await A.eaImport(quiet);
-    await A.eaTransfers(quiet);
     S.settings.eaLastSync = Date.now(); S.settings.eaAuto = true; persist(); render();
     if (!quiet) toast('Synced with EA');
   } catch (e) { toast(e.message, 'bad'); } finally { syncing = false; }
@@ -375,7 +383,7 @@ async function eaSyncAll(quiet = true) {
 
 function eaSubmitBlock(r) {
   if (!ui.sbc.ea) return 'this challenge was not loaded from EA';
-  if (EA.state.status !== 'ready') return 'your EA account is not connected';
+  if (EA.state.status !== 'ready' && EA.state.status !== 'busy') return 'you are not logged in with EA';
   if (ui.sbc.unsupported.length) return 'some EA requirements could not be read';
   if (r.squad.some(p => p.source === 'market')) return 'the squad needs cards you would have to buy first';
   if (r.squad.some(p => !p.eaId)) return 'some cards were not imported from EA';
@@ -405,10 +413,75 @@ function eaCard() {
   </section>`;
 }
 
+async function loadEaSets() {
+  ui.eaSets = await EA.loadSbcs();
+  render();
+}
+
 function eaSbcBar() {
-  if (EA.state.status !== 'ready' && EA.state.status !== 'busy') return '';
-  return `<div class="panel row between center wrap gap first"><div><b>EA SBCs</b><small class="muted" style="display:block">Load a live challenge from your account</small></div>
-    <button class="btn small primary" data-a="eaSbcs" ${EA.state.status === 'busy' ? 'disabled' : ''}>Load from EA</button></div>`;
+  if (!EA.available()) return '';
+  const st = EA.state.status;
+  if (st !== 'ready' && st !== 'busy') return `<div class="callout first">Log in with EA on the Home tab to see your live SBCs.</div>`;
+  const sets = ui.eaSets;
+  if (!sets) return `<h2 class="sec first">Live SBCs</h2><div class="callout"><span class="spin"></span> Loading your SBCs…</div>`;
+  const open = ui.eaOpenSet;
+  return `<div class="row between center first"><h2 class="sec flat">Live SBCs <small class="muted">${sets.length}</small></h2>
+      <button class="btn small" data-a="eaSetsRefresh" ${st === 'busy' ? 'disabled' : ''}>Refresh</button></div>
+    <ul class="list sets">${sets.map(x => `<li class="set ${open === x.id ? 'open' : ''}">
+      <button class="li li-main" data-a="eaSet" data-id="${x.id}"><b>${h(x.name)}</b><small>${x.done}/${x.challenges} done</small></button>
+      ${open === x.id ? (ui.eaChallenges ? `<ul class="chs">${ui.eaChallenges.map((c, i) => `<li><button class="li li-main" data-a="eaPick" data-i="${i}"><b>${h(c.name)}</b><small>${c.reqs.length} requirements · tap to solve</small></button></li>`).join('') || '<li class="muted">All done in this set.</li>'}</ul>`
+        : '<div class="hint"><span class="spin"></span> Loading challenges…</div>') : ''}
+    </li>`).join('') || '<li class="li muted">No open SBCs right now.</li>'}</ul>`;
+}
+
+function liveHome() {
+  const st = EA.state;
+  const connected = st.status === 'ready' || st.status === 'busy';
+  if (!connected) {
+    const reconnecting = S.settings.eaAuto && (st.status === 'opening' || st.status === 'waiting');
+    return `<section class="login">
+      <img src="icon.svg" alt="" width="72" height="72">
+      <h1>${reconnecting ? 'Reconnecting to EA…' : 'Log in with your EA account'}</h1>
+      <p class="muted">${reconnecting ? 'Using your saved EA login. EA\'s page opens only if it asks you to log in again.' : 'Your club, transfer list, coins and live SBCs load as soon as you log in. You type your password on EA\'s own page.'}</p>
+      ${reconnecting ? '<div class="spin big"></div><button class="btn" data-a="eaShow">Show EA page</button>'
+        : st.status === 'off' ? '<button class="btn primary wide" data-a="eaConnect">Log in with EA</button>'
+        : '<button class="btn primary wide" data-a="eaShow">Continue to EA login</button><button class="btn" data-a="eaOff">Cancel</button>'}
+      <p class="hint warnline">Automating the EA Web App is against EA's terms and can get an account restricted or banned.</p>
+      ${logBlock()}
+    </section>`;
+  }
+  const c = clubStats();
+  const t = tradeStats();
+  const expired = S.trades.filter(x => x.status === 'unsold').length;
+  return `
+    <section class="acct">
+      <div><small class="muted">Logged in as</small><b>${h(st.persona)}</b></div>
+      <div class="coins">${st.coins != null ? `${fmt(st.coins)} ${coin}` : ''}</div>
+    </section>
+    ${st.task ? `<div class="syncbar"><span class="spin"></span>${h(st.task)}</div>` : `<p class="hint">Updated ${S.settings.eaLastSync ? ago(S.settings.eaLastSync) : 'just now'} · refreshes every few minutes</p>`}
+    <div class="stats">
+      ${statTile('Club players', S.club.length || (st.task ? '…' : 0))}
+      ${statTile('Untradeable', fmt(c.untr))}
+      ${statTile('On transfer list', t.listed)}
+      ${statTile('Expired', expired, expired ? 'warn' : '')}
+      ${statTile('Profit if listed items sell', `${t.potProfit >= 0 ? '+' : ''}${fmt(t.potProfit)} ${coin}`, t.potProfit >= 0 ? 'good' : 'bad')}
+      ${statTile('Sold, after tax', `${fmt(t.soldIncome)} ${coin}`)}
+    </div>
+    <div class="row gap wrap actions">
+      <button class="btn primary" data-a="go" data-tab="sbc">Live SBCs${ui.eaSets ? ` (${ui.eaSets.length})` : ''}</button>
+      ${expired ? `<button class="btn" data-a="eaRelist" ${st.status === 'busy' ? 'disabled' : ''}>Relist ${expired} expired</button>` : ''}
+      <button class="btn" data-a="eaSync" ${st.status === 'busy' ? 'disabled' : ''}>Refresh</button>
+    </div>
+    ${S.history.length ? `<h2 class="sec">Recent SBCs</h2><ul class="list">
+      ${S.history.slice(0, 5).map(x => `<li class="li"><div><b>${h(x.name)}</b><small>${new Date(x.at).toLocaleString()} · rating ${x.rating} · chem ${x.chem}</small></div></li>`).join('')}</ul>` : ''}
+    <div class="row gap wrap foot"><button class="btn small" data-a="eaShow">Open EA Web App</button><button class="btn small danger" data-a="eaOff">Log out</button></div>
+    ${logBlock()}`;
+}
+
+function logBlock() {
+  const st = EA.state;
+  return st.log.length ? `<details class="ealog"><summary>Activity (${st.log.length})</summary><ul>${st.log.slice(0, 25).map(l => `<li class="${l.kind}"><time>${new Date(l.at).toLocaleTimeString()}</time> ${h(l.msg)}</li>`).join('')}</ul>
+    <button class="btn tiny" data-a="eaCopyLog">Copy log</button></details>` : '';
 }
 
 function renderResult() {
@@ -574,7 +647,7 @@ const A = {
     });
   },
   eaShow: () => EA.show(),
-  eaOff: () => { EA.disconnect(); S.settings.eaAuto = false; persist(); render(); },
+  eaOff: () => { EA.disconnect(); S.settings.eaAuto = false; ui.eaSets = null; ui.eaOpenSet = null; persist(); render(); },
   async eaCopyLog() {
     const text = EA.state.log.map(l => `${new Date(l.at).toISOString()} [${l.kind}] ${l.msg}`).join('\n');
     try { await navigator.clipboard.writeText(text); toast('Log copied'); } catch { showText('Activity log', 'log.txt', text, 'text/plain'); }
@@ -618,15 +691,13 @@ const A = {
     } catch (e) { toast(e.message, 'bad'); }
   },
   async eaSet(el) {
-    openModal('<h2>Loading challenges…</h2><p class="hint">This takes a few seconds. Requests are spaced out on purpose.</p>');
-    try {
-      const list = await EA.loadChallenges(el.dataset.id);
-      ui.eaChallenges = list;
-      openModal(`<h2>Pick a challenge</h2><ul class="list picker">${list.map((c, i) => `<li><button class="li li-main" data-a="eaPick" data-i="${i}"><b>${h(c.name)}</b>
-        <small>${c.reqs.length} requirements${c.bricks ? ' · has locked slots' : ''}</small></button></li>`).join('') || '<li class="li muted">All challenges in this set are done.</li>'}</ul>
-        <button class="btn" data-a="close">Close</button>`);
-    } catch (e) { closeModal(); toast(e.message, 'bad'); }
+    const id = +el.dataset.id;
+    if (ui.eaOpenSet === id) { ui.eaOpenSet = null; render(); return; }
+    ui.eaOpenSet = id; ui.eaChallenges = null; render();
+    try { ui.eaChallenges = await EA.loadChallenges(id); } catch (e) { ui.eaOpenSet = null; toast(e.message, 'bad'); }
+    render();
   },
+  async eaSetsRefresh() { try { await loadEaSets(); } catch (e) { toast(e.message, 'bad'); } },
   eaPick(el) {
     const c = ui.eaChallenges[+el.dataset.i];
     const reqs = []; const unsupported = [];
@@ -641,7 +712,8 @@ const A = {
       custom: slots.length === 11 ? EA.formationFromSlots(slots) : null,
       ea: { setId: c.setId, challengeId: c.id } };
     ui.result = null; closeModal(); render();
-    toast('Challenge loaded. Tap Solve.');
+    document.getElementById('solver')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    runSolve(false);
   },
   eaSubmit() {
     const r = ui.result;
@@ -920,6 +992,9 @@ document.addEventListener('deviceready', () => {
   // Reconnect in the background if you've connected before.
   if (S.settings.eaAuto && EA.available()) EA.connect({ hidden: true });
 });
+setInterval(() => {
+  if (document.visibilityState === 'visible' && EA.state.status === 'ready' && Date.now() - (S.settings.eaLastSync || 0) > 5 * 60000) eaSyncAll(true);
+}, 60000);
 document.addEventListener('resume', () => {
   if (EA.state.status === 'ready' && Date.now() - (S.settings.eaLastSync || 0) > 3 * 60000) eaSyncAll(true);
 });

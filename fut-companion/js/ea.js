@@ -15,7 +15,7 @@
 
 export const WEBAPP_URL = 'https://www.ea.com/ea-sports-fc/ultimate-team/web-app/';
 
-export const state = { status: 'off', persona: '', log: [] }; // off | opening | waiting | ready | busy
+export const state = { status: 'off', persona: '', coins: null, task: '', log: [] }; // off | opening | waiting | ready | busy
 let ref = null;
 let pollTimer = null;
 let onChange = () => {};
@@ -48,7 +48,7 @@ const HELPER = `(function () {
   if (window.__ss) return 'ok';
   var ss = window.__ss = { res: {}, cmd: null, items: {} };
   ss.wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
-  ss.human = function () { return ss.wait(700 + Math.random() * 900); };
+  ss.human = function () { return ss.wait(350 + Math.random() * 450); };
   ss.obs = function (o) {
     return new Promise(function (res, rej) {
       if (!o || !o.observe) return rej(new Error('EA service returned nothing'));
@@ -107,15 +107,17 @@ const HELPER = `(function () {
 })()`;
 
 // Runs an async function body inside the EA page and waits for its result.
-async function job(body, timeoutMs = 120000) {
+async function job(body, timeoutMs = 120000, onProgress = null) {
   await exec(HELPER);
   const id = `j${++jobSeq}`;
   await exec(`window.__ss.run(${JSON.stringify(id)}, async function () { ${body} }); 'started'`);
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
     await sleep(600);
-    const raw = await exec(`JSON.stringify(window.__ss && window.__ss.res[${JSON.stringify(id)}] || null)`);
-    const r = raw ? JSON.parse(raw) : null;
+    const raw = await exec(`JSON.stringify({ r: window.__ss && window.__ss.res[${JSON.stringify(id)}] || null, p: window.__ss && window.__ss.progress })`);
+    const box = raw ? JSON.parse(raw) : {};
+    const r = box.r;
+    if (onProgress && box.p != null) onProgress(box.p);
     if (r && r.done) {
       exec(`delete window.__ss.res[${JSON.stringify(id)}]`).catch(() => {});
       if (!r.ok) throw new Error(r.error);
@@ -144,7 +146,7 @@ export function connect({ hidden = false } = {}) {
   ref.addEventListener('exit', () => { ref = null; clearInterval(pollTimer); setStatus('off'); log('EA Web App closed.'); });
   ref.addEventListener('loaderror', e => log(`Could not load EA Web App: ${e.message || 'network error'}`, 'bad'));
   setStatus('waiting');
-  log(hidden ? 'Reconnecting to EA…' : 'Log in to the EA Web App. SquadSage never sees your password.');
+  log(hidden ? 'Reconnecting to EA…' : 'Log in on EA\'s page. SquadSage never sees your password.');
   clearInterval(pollTimer);
   pollTimer = setInterval(checkLogin, 2000);
 }
@@ -174,19 +176,44 @@ async function checkLogin() {
 export function show() { if (ref) ref.show(); else connect(); }
 export function disconnect() { if (ref) ref.close(); ref = null; clearInterval(pollTimer); clearTimeout(showTimer); state.persona = ''; setStatus('off'); }
 
-async function guarded(label, fn) {
-  if (state.status !== 'ready') throw new Error('Connect your EA account first.');
-  setStatus('busy');
-  log(`${label}…`);
-  try {
-    const v = await fn();
-    return v;
-  } catch (e) {
-    log(`${label} failed: ${e.message}`, 'bad');
-    throw e;
-  } finally {
-    if (state.status === 'busy') setStatus('ready');
-  }
+// EA requests run one at a time, in the order they were asked for.
+let queue = Promise.resolve();
+let pending = 0;
+function guarded(label, fn) {
+  if (state.status !== 'ready' && state.status !== 'busy') return Promise.reject(new Error('Log in with EA first.'));
+  pending++;
+  const run = queue.then(async () => {
+    setStatus('busy');
+    state.task = `${label}…`;
+    log(`${label}…`);
+    try {
+      return await fn();
+    } catch (e) {
+      log(`${label} failed: ${e.message}`, 'bad');
+      throw e;
+    } finally {
+      pending--;
+      state.task = '';
+      if (state.status === 'busy' && pending === 0) setStatus('ready'); else onChange();
+    }
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
+// ---------------------------------------------------------------- account
+export function readAccount() {
+  return guarded('Loading your account', async () => {
+    const a = await job(`
+      var u = services.User.getUser(), c = null;
+      try { c = u.getCurrency(GameCurrency.COINS).amount; } catch (e) {}
+      if (c == null) try { c = u.coins.amount; } catch (e) {}
+      if (c == null) try { c = (u.currencies || []).filter(function (x) { return /coin/i.test(x.name); })[0].amount; } catch (e) {}
+      return { coins: c, name: u.personaName || '' };`, 30000);
+    if (a.coins != null) state.coins = a.coins;
+    if (a.name) state.persona = a.name;
+    return a;
+  });
 }
 
 // ---------------------------------------------------------------- club
@@ -194,17 +221,20 @@ export function importClub() {
   return guarded('Reading your club', async () => {
     const players = await job(`
       var ss = window.__ss, out = [], offset = 0, count = 91;
+      ss.progress = 0;
       for (var page = 0; page < 60; page++) {
         var c = new UTSearchCriteriaDTO();
         c.type = SearchType.PLAYER; c.count = count; c.offset = offset;
         var r = await ss.obs(services.Club.search(c));
         var items = (r.response && r.response.items) || [];
         items.forEach(function (i) { ss.items[i.id] = i; out.push(ss.mapItem(i)); });
+        ss.progress = out.length;
         if (!items.length || r.response.retrievedAll || items.length < count) break;
         offset += items.length;
         await ss.human();
       }
-      return out;`, 300000);
+      ss.progress = null;
+      return out;`, 300000, n => { state.task = `Loading your club… ${n} players`; onChange(); });
     const usable = players.filter(p => !p.loan);
     log(`Read ${players.length} players (${players.length - usable.length} loans skipped).`, 'good');
     return usable;
