@@ -17,7 +17,18 @@ SquadSage is a rebuild of the *idea* behind FUTGenie (an SBC solver, squad build
 | Missing: telling your club apart from what you'd have to buy | | The result splits "From your club" from "Buy from market" and shows the coins you'll spend. Untradeables and duplicates are used first |
 | Rating rounding causes false "valid" squads | | Team rating is always rounded **down**, so the app never says pass when the game would reject it |
 
-## Features
+## Android app: runs inside the EA Web App
+
+The Android app opens the official EA FC Web App full-screen (your real cards, coins and data, served by EA). SquadSage injects a small layer into that page: a floating ★ button that opens the SquadSage panel.
+
+- **SBC:** your live SBC sets. Tap a challenge and it's solved straight from your club, with requirement checks. Then submit to EA.
+- **Club:** lock players so the solver never uses them.
+- **Trades:** income and profit after the 5% tax, and relist all expired items.
+- **Safety:** hourly and daily submission limits (default 90/300) to avoid EA soft-bans, plus an activity log.
+
+Files: `shell.html` (app start screen that opens EA) and `js/overlay.js` (the injected layer, bundled with `js/engine.js` into `www/overlay.bundle.js` by `build-www.mjs`). Automating the Web App is against EA's terms; the app warns about this on first launch.
+
+## Features (browser version)
 
 - **SBC solver**: requirements for team rating, squad chemistry, per-player chemistry, "min/max/exactly N players with nation/league/club/rarity/quality", "from the same …", "different …" and player rating range. Solving uses simulated annealing in a Web Worker. Cost rules: untradeables are free, duplicates are discounted, tradeable cards are valued at their after-tax price, and market fodder is costed from an editable price table. "Try another solution" gives you alternatives. "I submitted it" removes the used cards from your club and can be undone.
 - **Squad builder**: 6 formations, live team rating and the 0–3 chemistry per player (club 2/5/8, nation 2/5/8, league 3/5/8; icons and heroes handled).

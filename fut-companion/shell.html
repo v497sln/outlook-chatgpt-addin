@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SquadSage</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0d1420; color: #e9eef6;
+      font: 16px/1.45 system-ui, -apple-system, Roboto, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+    main { display: grid; gap: 14px; justify-items: center; max-width: 360px; }
+    img { border-radius: 18px; }
+    h1 { margin: 0; font-size: 24px; font-weight: 600; } h1 b { color: #12c2a0; font-weight: 600; }
+    p { margin: 0; color: #8b9ab2; }
+    .warn { font-size: 13px; color: #ffc857; }
+    button { background: #12c2a0; color: #062a23; border: 0; border-radius: 14px; padding: 14px 24px; font-size: 16px; font-weight: 700; min-width: 240px; }
+    .spin { width: 28px; height: 28px; border: 3px solid #12c2a0; border-right-color: transparent; border-radius: 50%; animation: s .7s linear infinite; }
+    @keyframes s { to { transform: rotate(360deg); } }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="icon.svg" alt="" width="72" height="72">
+    <h1>Squad<b>Sage</b></h1>
+    <div class="spin" id="spin"></div>
+    <p id="msg">Opening the EA FC Web App…</p>
+    <p class="warn" id="warn" hidden>SquadSage automates the EA Web App (SBC submits, relisting). This is against EA's terms and EA can restrict or ban accounts for it. You use it at your own risk.</p>
+    <button id="go" hidden>Open EA Web App</button>
+  </main>
+  <script>
+    const WEBAPP = 'https://www.ea.com/ea-sports-fc/ultimate-team/web-app/';
+    const $ = id => document.getElementById(id);
+    let ref = null, code = null;
+    let accepted = false;
+    try { accepted = localStorage.getItem('ss-accepted') === '1'; } catch (e) {}
+
+    async function overlayCode() {
+      if (!code) code = await (await fetch('overlay.bundle.js')).text();
+      return code;
+    }
+    async function inject() {
+      if (!ref) return;
+      try { ref.executeScript({ code: await overlayCode() }); } catch (e) {}
+    }
+    function idle(msg) {
+      $('spin').hidden = true; $('msg').textContent = msg; $('go').hidden = false;
+    }
+    function open() {
+      if (!window.cordova || !cordova.InAppBrowser) return idle('This only works in the SquadSage Android app.');
+      $('spin').hidden = false; $('go').hidden = true; $('warn').hidden = true; $('msg').textContent = 'Opening the EA FC Web App…';
+      ref = cordova.InAppBrowser.open(WEBAPP, '_blank',
+        'location=no,toolbar=no,hidden=no,clearcache=no,clearsessioncache=no,hardwareback=yes,zoom=no,hidenavigationbuttons=yes');
+      ref.addEventListener('loadstop', () => { inject(); setTimeout(inject, 4000); });
+      ref.addEventListener('loaderror', () => idle('Could not reach EA. Check your connection.'));
+      ref.addEventListener('exit', () => { ref = null; idle('EA Web App closed.'); });
+    }
+    function start() {
+      if (accepted) return open();
+      $('spin').hidden = true; $('warn').hidden = false; $('go').hidden = false;
+      $('go').textContent = 'I understand, continue';
+      $('msg').textContent = 'Log in on EA\'s own page. SquadSage never sees your password.';
+    }
+    $('go').addEventListener('click', () => {
+      if (!accepted) { accepted = true; try { localStorage.setItem('ss-accepted', '1'); } catch (e) {} }
+      $('go').textContent = 'Open EA Web App';
+      open();
+    });
+    document.addEventListener('deviceready', start);
+    document.addEventListener('resume', () => { if (!ref) open(); });
+    setTimeout(() => { if (!window.cordova) idle('This only works in the SquadSage Android app.'); }, 4000);
+  </script>
+</body>
+</html>
