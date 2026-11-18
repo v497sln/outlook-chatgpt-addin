@@ -35,6 +35,8 @@ npm test           # engine unit tests (node --test)
 
 Open it on your phone and use "Add to Home screen" to install it.
 
+`node build.mjs` bundles everything into one file, `dist/squadsage.html`, which you can open or host anywhere.
+
 ### CSV format
 
 ```

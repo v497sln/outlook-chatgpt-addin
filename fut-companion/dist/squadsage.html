@@ -1,0 +1,1763 @@
+<title>SquadSage</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root {
+  --bg: #0d1420;
+  --bg2: #141d2c;
+  --panel: #18233456;
+  --line: #26344a;
+  --text: #e9eef6;
+  --muted: #8b9ab2;
+  --accent: #12c2a0;
+  --accent-ink: #062a23;
+  --good: #3ddc84;
+  --bad: #ff6b6b;
+  --warn: #ffc857;
+  --gold: #e6c35c;
+  --silver: #b9c2cf;
+  --bronze: #c98a5a;
+  --special: #b88cff;
+  --radius: 14px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { line-height: 1.2; }
+h3 { font-size: 15px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+code { background: var(--bg); padding: 1px 5px; border-radius: 6px; font-size: 12px; word-break: break-all; }
+
+.top {
+  position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-size: 18px; letter-spacing: .01em; }
+.brand b { color: var(--accent); }
+.pill { font-size: 12px; color: var(--muted); border: 1px solid var(--line); padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+
+main { max-width: 620px; margin: 0 auto; padding-block: 0 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); outline: none; }
+textarea { resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
+
+.nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: space-around;
+  background: var(--bg2); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.nav button {
+  flex: 1; max-width: 110px; background: none; border: 0; color: var(--muted); display: flex; flex-direction: column;
+  align-items: center; gap: 1px; font-size: 12px; padding: 4px 0; cursor: pointer; border-radius: 10px;
+}
+.nav button span { font-size: 20px; line-height: 1.1; }
+.nav button.on { color: var(--text); }
+.nav button.on span { color: var(--accent); }
+
+.sec { font-size: 18px; margin: 26px 0 10px; }
+.sec.first { margin-top: 18px; }
+.sec.flat { margin: 0; }
+.first { margin-top: 18px; }
+.muted { color: var(--muted); font-weight: 400; }
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0; }
+.good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+.row { display: flex; } .gap { gap: 8px; } .wrap { flex-wrap: wrap; } .center { align-items: center; }
+.between { justify-content: space-between; } .grow { flex: 1; min-width: 0; }
+
+.hero { padding: 22px 0 6px; }
+.hero h1 { font-size: 24px; margin: 0 0 8px; }
+.hero p { color: var(--muted); margin: 0 0 16px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line);
+  background: var(--bg2); padding: 10px 16px; border-radius: 12px; cursor: pointer; font-weight: 600; min-height: 44px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 6px 12px; min-height: 36px; font-size: 14px; }
+.btn.tiny { padding: 4px 10px; min-height: 30px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.icon-btn { background: none; border: 1px solid transparent; color: var(--muted); font-size: 18px; min-width: 36px; min-height: 36px; border-radius: 10px; cursor: pointer; }
+.icon-btn:hover { border-color: var(--line); color: var(--text); }
+.link { background: none; border: 0; color: var(--accent); font-weight: 700; cursor: pointer; padding: 0 0 0 6px; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stats.three { grid-template-columns: repeat(3, 1fr); }
+.stat { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
+.stat span { display: block; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.stat b { font-size: 20px; display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.stat.good b { color: var(--good); } .stat.bad b { color: var(--bad); } .stat.warn b { color: var(--warn); }
+.coin { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a3, #d9a930 60%, #a87912); flex: none; }
+
+.callout { border: 1px solid var(--line); background: var(--bg2); border-radius: var(--radius); padding: 12px 14px; margin: 14px 0; }
+.callout .row { margin-top: 10px; }
+.callout.good { border-color: color-mix(in srgb, var(--good) 50%, var(--line)); color: var(--good); }
+.callout.bad { border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); color: var(--bad); }
+
+.fixes { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.fixes li { background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 10px 12px; color: var(--muted); }
+.fixes b { color: var(--text); }
+
+.panel { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 14px 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.span2 { grid-column: 1 / -1; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input, select, textarea {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; min-height: 42px; width: 100%; min-width: 0;
+}
+input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+label.inline select { min-height: 38px; }
+
+.switch { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-size: 14px; cursor: pointer; padding: 4px 0; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch span { width: 40px; height: 24px; border-radius: 99px; background: var(--line); position: relative; flex: none; transition: .15s; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { left: 19px; }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); }
+.toggles { margin: 12px 0; display: grid; gap: 4px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: var(--bg2); border-radius: 99px; padding: 7px 13px; cursor: pointer; font-size: 14px; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.chip-wrap { display: inline-flex; align-items: center; }
+.chip-wrap .chip { border-radius: 99px 0 0 99px; }
+.chip-x { border: 1px solid var(--line); border-left: 0; background: var(--bg2); border-radius: 0 99px 99px 0; padding: 7px 10px; cursor: pointer; color: var(--muted); }
+
+.reqs { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6px; }
+.reqs li { display: flex; justify-content: space-between; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 4px 4px 4px 12px; min-height: 44px; }
+.addreq summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.addreq .btn { margin-top: 10px; }
+
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.checks li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: var(--bg2); }
+.checks li em { margin-left: auto; font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.checks li.ok span { color: var(--good); } .checks li.no { color: var(--bad); }
+
+.spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s .7s linear infinite; }
+@keyframes s { to { transform: rotate(360deg); } }
+
+/* pitch */
+.pitch {
+  position: relative; aspect-ratio: 3 / 4; margin: 14px 0; border-radius: 18px; overflow: hidden;
+  background: repeating-linear-gradient(180deg, #14533d 0 10%, #186147 10% 20%);
+  border: 1px solid #1f7556;
+}
+.pitch-lines { position: absolute; inset: 4%; border: 2px solid #ffffff2a; border-radius: 6px; }
+.pitch-lines::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 2px solid #ffffff2a; }
+.pitch-lines::after { content: ""; position: absolute; left: 50%; top: 50%; width: 22%; aspect-ratio: 1; border: 2px solid #ffffff2a; border-radius: 50%; transform: translate(-50%, -50%); }
+.slot { position: absolute; transform: translate(-50%, -50%); width: 17%; }
+.slot-btn { all: unset; display: block; cursor: pointer; border-radius: 10px; }
+.slot-btn:focus-visible { outline: 2px solid #fff; }
+.pcard {
+  position: relative; border-radius: 10px; padding: 4px 3px 5px; text-align: center; color: #1b1406;
+  background: linear-gradient(160deg, #f5e3a1, var(--gold)); box-shadow: 0 2px 8px #0006; font-size: 10px; line-height: 1.2;
+}
+.pcard.silver { background: linear-gradient(160deg, #eef1f5, var(--silver)); }
+.pcard.bronze { background: linear-gradient(160deg, #ecc29e, var(--bronze)); }
+.pcard.rare { box-shadow: 0 0 0 2px #fff8, 0 2px 8px #0006; }
+.pcard.special { background: linear-gradient(160deg, #e7d8ff, var(--special)); }
+.pcard.empty { background: #ffffff14; color: #fff; border: 1.5px dashed #ffffff55; box-shadow: none; min-height: 58px; display: flex; flex-direction: column; justify-content: center; }
+.pcard.empty span { font-size: 18px; opacity: .7; }
+.pc-top { display: flex; justify-content: space-between; padding: 0 3px; }
+.pc-top b { font-size: 14px; }
+.pc-top small { font-size: 9px; font-weight: 700; opacity: .75; }
+.pc-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; }
+.pc-meta { font-size: 9px; opacity: .7; }
+.chem { display: block; font-size: 8px; letter-spacing: 1px; }
+.chem.c0 { color: #b02a2a; } .chem.c1, .chem.c2 { color: #7a5b00; } .chem.c3 { color: #0b6b3a; }
+.pc-tags { position: absolute; top: -7px; right: -4px; display: flex; gap: 2px; }
+
+.tag { font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 6px; background: var(--line); color: var(--text); }
+.tag.ut { background: #3a4a63; color: #cfe0ff; }
+.tag.dup { background: #5a4a1b; color: #ffe3a0; }
+.tag.buy { background: var(--warn); color: #3b2a00; }
+.tag.sp { background: var(--special); color: #241046; text-transform: uppercase; }
+
+/* lists */
+.list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; }
+.li { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; min-height: 52px; }
+.li small { display: block; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li > div { min-width: 0; }
+.li-main { all: unset; flex: 1; min-width: 0; cursor: pointer; }
+.li-main:focus-visible { outline: 2px solid var(--accent); border-radius: 6px; }
+.li-main b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pills { display: flex; gap: 4px; }
+.badge { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; color: #1b1406; background: var(--gold); }
+.badge.silver { background: var(--silver); } .badge.bronze { background: var(--bronze); }
+.badge.rare { box-shadow: inset 0 0 0 2px #fff9; }
+.icon-btn.on { color: var(--warn); }
+.num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.trade .acts { display: flex; gap: 4px; align-items: center; }
+.toolbar { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin: 12px 0 8px; }
+.addtrade { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 8px; align-items: end; }
+
+.prices { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.prices label { flex-direction: row; align-items: center; gap: 6px; }
+
+dialog {
+  width: min(560px, calc(100vw - 24px)); max-height: 86vh; border: 1px solid var(--line); border-radius: 18px;
+  background: var(--bg2); color: var(--text); padding: 18px; overflow: auto;
+}
+dialog::backdrop { background: #000a; }
+dialog h2 { margin-top: 0; }
+dialog .row { margin-top: 12px; }
+dialog form .row { margin-top: 4px; }
+.picker { max-height: 52vh; overflow: auto; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
+  background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; opacity: 0; pointer-events: none;
+  transition: .2s; max-width: calc(100vw - 32px); z-index: 20; font-weight: 600;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast.bad { background: var(--bad); color: #2b0000; }
+
+@media (max-width: 480px) {
+  .addtrade { grid-template-columns: 1fr 1fr; }
+  .addtrade label:first-child { grid-column: 1 / -1; }
+  .addtrade .btn { grid-column: 1 / -1; }
+  .toolbar { grid-template-columns: 1fr 1fr; }
+  .toolbar input { grid-column: 1 / -1; }
+  .stat b { font-size: 18px; }
+  .pill { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* trade rows wrap on narrow screens instead of overflowing */
+.trade { flex-wrap: wrap; }
+.trade .acts { margin-left: auto; }
+.row.between { flex-wrap: wrap; gap: 8px; }
+.row.between > .row select { width: auto; min-height: 36px; padding: 4px 8px; }
+html, body { overflow-x: hidden; }
+@media (max-width: 480px) {
+  .trade .grow { flex-basis: calc(100% - 90px); }
+  .trade .acts { width: 100%; justify-content: flex-end; }
+}
+
+.top { top: env(safe-area-inset-top, 0px); padding-top: 10px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+body { background: var(--bg); }
+</style>
+<header class="top">
+    <div class="brand"><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22%2312c2a0%22%2F%3E%3Cpath%20d%3D%22M32%2012l5.6%2011.4%2012.6%201.8-9.1%208.9%202.1%2012.5L32%2040.7l-11.2%205.9%202.1-12.5-9.1-8.9%2012.6-1.8z%22%20fill%3D%22%230d1420%22%2F%3E%3C%2Fsvg%3E" alt="" width="30" height="30"><span>Squad<b>Sage</b></span></div>
+    <div class="row center gap">
+      <span class="pill" id="net" title="Your data never leaves this device">On-device · no login</span>
+      <button class="icon-btn" data-a="settings" aria-label="Settings">⚙︎</button>
+    </div>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <nav class="nav" aria-label="Main">
+    <button data-tab="home"><span aria-hidden="true">⌂</span>Home</button>
+    <button data-tab="sbc"><span aria-hidden="true">✦</span>SBC</button>
+    <button data-tab="squad"><span aria-hidden="true">◎</span>Squad</button>
+    <button data-tab="club"><span aria-hidden="true">▤</span>Club</button>
+    <button data-tab="trades"><span aria-hidden="true">⇄</span>Trades</button>
+  </nav>
+  <dialog id="modal"><div id="modal-body"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module">
+globalThis.__SOLVER_SRC = "const __m = {};\n__m.engine = (() => {\n// Pure game-logic engine: team rating, chemistry, SBC requirement checks,\n// and a local SBC solver. No DOM access so it can be unit-tested in Node.\n\nconst ATTRS = ['nation', 'league', 'club'];\n\nfunction quality(rating) {\n  return rating >= 75 ? 'gold' : rating >= 65 ? 'silver' : 'bronze';\n}\n\n// ---------------------------------------------------------------------------\n// Team rating\n// FUT divides by 11, then adds \"excess\" for every player above the average.\n// We round DOWN (never up) so the app never claims a squad passes when the\n// game would reject it — a top complaint about the original app was failed\n// SBC submissions.\nfunction teamRatingRaw(ratings) {\n  const total = ratings.reduce((a, b) => a + (b || 0), 0);\n  const avg = total / 11;\n  let excess = 0;\n  for (const r of ratings) if (r && r > avg) excess += r - avg;\n  return (total + excess) / 11;\n}\n\nfunction teamRating(ratings) {\n  return Math.floor(Math.round(teamRatingRaw(ratings) * 1000) / 1000);\n}\n\n// ---------------------------------------------------------------------------\n// Chemistry (current system: 0–3 per player, 33 max)\nconst CLUB_STEPS = [2, 5, 8];\nconst NATION_STEPS = [2, 5, 8];\nconst LEAGUE_STEPS = [3, 5, 8];\n\nfunction steps(count, thresholds) {\n  let p = 0;\n  for (const t of thresholds) if (count >= t) p++;\n  return p;\n}\n\nfunction inPosition(player, slotPos) {\n  return !!player && Array.isArray(player.positions) && player.positions.includes(slotPos);\n}\n\n// squad: array aligned with formation.slots, entries may be null.\nfunction chemistry(squad, formation) {\n  const club = new Map(), nation = new Map(), league = new Map();\n  let iconLeagueBonus = 0;\n  const add = (m, k, n) => { if (k) m.set(k, (m.get(k) || 0) + n); };\n\n  squad.forEach((p, i) => {\n    if (!p || p.generic || !inPosition(p, formation.slots[i].pos)) return;\n    const r = p.rarity;\n    if (r === 'icon') {\n      add(nation, p.nation, 2);\n      iconLeagueBonus += 1;\n    } else if (r === 'hero') {\n      add(nation, p.nation, 1);\n      add(league, p.league, 2);\n      add(club, p.club, 1);\n    } else {\n      add(nation, p.nation, 1);\n      add(league, p.league, 1);\n      add(club, p.club, 1);\n    }\n  });\n\n  const per = squad.map((p, i) => {\n    if (!p || p.generic) return 0;\n    if (!inPosition(p, formation.slots[i].pos)) return 0;\n    if (p.rarity === 'icon' || p.rarity === 'hero') return 3;\n    const lg = (league.get(p.league) || 0) + iconLeagueBonus;\n    const pts = steps(club.get(p.club) || 0, CLUB_STEPS)\n      + steps(nation.get(p.nation) || 0, NATION_STEPS)\n      + steps(lg, LEAGUE_STEPS);\n    return Math.min(3, pts);\n  });\n  return { total: per.reduce((a, b) => a + b, 0), per };\n}\n\n// ---------------------------------------------------------------------------\n// Requirements\n// Types:\n//   {t:'rating', n}                      min team rating\n//   {t:'chem', n}                        min total chemistry\n//   {t:'playerChem', n}                  every player has at least n chem\n//   {t:'count', attr, value, op, n}      attr in nation|league|club|rarity|quality|rare\n//   {t:'same', attr, op, n}              min/max players from the SAME attr value\n//   {t:'distinct', attr, op, n}          min/max DIFFERENT attr values\n//   {t:'ovr', min, max}                  every player's rating within bounds\nconst OPS = { min: 'Min', max: 'Max', exact: 'Exactly' };\nconst ATTR_LABEL = { nation: 'nation', league: 'league', club: 'club', rarity: 'rarity', quality: 'quality', rare: 'rare' };\n\nfunction describeReq(r) {\n  switch (r.t) {\n    case 'rating': return `Team rating: min ${r.n}`;\n    case 'chem': return `Squad chemistry: min ${r.n}`;\n    case 'playerChem': return `Each player chemistry: min ${r.n}`;\n    case 'count':\n      if (r.attr === 'rare') return `${OPS[r.op]} ${r.n} rare player${r.n === 1 ? '' : 's'}`;\n      return `${OPS[r.op]} ${r.n} player${r.n === 1 ? '' : 's'} with ${ATTR_LABEL[r.attr]}: ${r.value}`;\n    case 'same': return `${OPS[r.op]} ${r.n} players from the same ${ATTR_LABEL[r.attr]}`;\n    case 'distinct': return `${OPS[r.op]} ${r.n} different ${ATTR_LABEL[r.attr]}s`;\n    case 'ovr': {\n      const parts = [];\n      if (r.min != null) parts.push(`min ${r.min}`);\n      if (r.max != null) parts.push(`max ${r.max}`);\n      return `Player rating: ${parts.join(', ')}`;\n    }\n    default: return 'Unknown requirement';\n  }\n}\n\nfunction attrValue(p, attr) {\n  if (!p) return null;\n  if (attr === 'quality') return quality(p.rating);\n  if (attr === 'rare') return p.rare ? true : null;\n  if (p.generic) return null; // \"any card\" fodder has no nation/league/club\n  return p[attr] ?? null;\n}\n\nfunction counts(squad, attr) {\n  const m = new Map();\n  for (const p of squad) {\n    const v = attrValue(p, attr);\n    if (v == null) continue;\n    m.set(v, (m.get(v) || 0) + 1);\n  }\n  return m;\n}\n\nfunction cmp(op, actual, n) {\n  if (op === 'min') return { ok: actual >= n, deficit: Math.max(0, n - actual) };\n  if (op === 'max') return { ok: actual <= n, deficit: Math.max(0, actual - n) };\n  return { ok: actual === n, deficit: Math.abs(actual - n) };\n}\n\n// Evaluates a full squad. Returns per-requirement results with a numeric\n// deficit (0 = satisfied) that the solver uses as a gradient.\nfunction evaluate(squad, formation, reqs) {\n  const ratings = squad.map(p => (p ? p.rating : 0));\n  const rawRating = teamRatingRaw(ratings);\n  const rating = teamRating(ratings);\n  const chem = chemistry(squad, formation);\n  const filled = squad.filter(Boolean).length;\n\n  const results = reqs.map(r => {\n    let actual, res;\n    switch (r.t) {\n      case 'rating':\n        actual = rating;\n        res = { ok: rating >= r.n, deficit: rating >= r.n ? 0 : Math.max(0.05, r.n - rawRating) };\n        break;\n      case 'chem':\n        actual = chem.total;\n        res = cmp('min', chem.total, r.n);\n        break;\n      case 'playerChem': {\n        const short = chem.per.reduce((a, c, i) => a + (squad[i] ? Math.max(0, r.n - c) : 0), 0);\n        actual = Math.min(...chem.per.filter((_, i) => squad[i]), 3);\n        res = { ok: short === 0, deficit: short };\n        break;\n      }\n      case 'count': {\n        const c = r.attr === 'rare'\n          ? squad.filter(p => p && p.rare).length\n          : (counts(squad, r.attr).get(r.value) || 0);\n        actual = c;\n        res = cmp(r.op, c, r.n);\n        break;\n      }\n      case 'same': {\n        const m = counts(squad, r.attr);\n        const top = m.size ? Math.max(...m.values()) : 0;\n        actual = top;\n        if (r.op === 'max') {\n          let over = 0;\n          for (const v of m.values()) over += Math.max(0, v - r.n);\n          res = { ok: over === 0, deficit: over };\n        } else res = cmp(r.op, top, r.n);\n        break;\n      }\n      case 'distinct': {\n        const d = counts(squad, r.attr).size;\n        actual = d;\n        res = cmp(r.op, d, r.n);\n        break;\n      }\n      case 'ovr': {\n        let bad = 0;\n        for (const p of squad) {\n          if (!p) continue;\n          if (r.min != null && p.rating < r.min) bad += r.min - p.rating;\n          if (r.max != null && p.rating > r.max) bad += p.rating - r.max;\n        }\n        actual = bad ? 'out of range' : 'ok';\n        res = { ok: bad === 0, deficit: bad };\n        break;\n      }\n      default:\n        res = { ok: true, deficit: 0 };\n    }\n    return { req: r, label: describeReq(r), actual, ...res };\n  });\n\n  const missing = 11 - filled;\n  results.unshift({\n    req: { t: 'size' }, label: 'Squad has 11 players', actual: filled,\n    ok: missing === 0, deficit: missing * 5,\n  });\n\n  return {\n    rating, rawRating, chem,\n    results,\n    ok: results.every(r => r.ok),\n    violation: results.reduce((a, r) => a + r.deficit, 0),\n  };\n}\n\n// ---------------------------------------------------------------------------\n// Market price helpers\n\n// Transfer-market price steps (prices must land on these increments).\nfunction priceStep(price) {\n  if (price < 1000) return 50;\n  if (price < 10000) return 100;\n  if (price < 50000) return 250;\n  if (price < 100000) return 500;\n  return 1000;\n}\n\nfunction roundToMarket(price, dir = 'nearest') {\n  price = Math.max(150, price);\n  const s = priceStep(price);\n  const f = dir === 'down' ? Math.floor : dir === 'up' ? Math.ceil : Math.round;\n  return Math.max(150, f(price / s) * s);\n}\n\nconst EA_TAX = 0.05;\nconst afterTax = p => Math.floor(p * (1 - EA_TAX));\n\n// ---------------------------------------------------------------------------\n// Solver\n\nfunction mulberry32(seed) {\n  let a = seed >>> 0;\n  return function () {\n    a |= 0; a = (a + 0x6D2B79F5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\n\n// What a card \"costs\" to put into an SBC.\n//  - Protected cards are never used.\n//  - Untradeables are free (they can't be sold anyway) — used first.\n//  - Duplicates are discounted so they get cleared first.\n//  - Tradeable club cards cost what you'd get selling them (after 5% tax).\n//  - Market buys cost the full price.\nfunction cardCost(p, priceTable) {\n  const est = p.price || priceTable[p.rating] || 0;\n  if (p.generic) return est;\n  if (p.untradeable) return p.rating * 0.01 + (p.duplicate ? 0 : 0.5);\n  const v = afterTax(est);\n  return p.duplicate ? v * 0.6 : v;\n}\n\nfunction buildPool(club, opts = {}) {\n  const { priceTable = {}, useMarket = true, ovrReq = null, excludeIds = [] } = opts;\n  const ex = new Set(excludeIds);\n  const pool = [];\n  for (const p of club) {\n    if (p.protected || ex.has(p.id)) continue;\n    const copies = Math.max(1, p.count || 1);\n    for (let k = 0; k < copies; k++) {\n      pool.push({ ...p, uid: `${p.id}#${k}`, duplicate: p.duplicate || k > 0, source: 'club' });\n    }\n  }\n  if (useMarket) {\n    for (const [rStr, price] of Object.entries(priceTable)) {\n      const r = +rStr;\n      if (!price) continue;\n      for (let k = 0; k < 11; k++) {\n        pool.push({\n          id: `any-${r}`, uid: `any-${r}#${k}`, name: `Any ${r}-rated card`, rating: r,\n          positions: [], generic: true, rare: false, price, source: 'market',\n        });\n      }\n    }\n  }\n  const inRange = p => !ovrReq\n    || ((ovrReq.min == null || p.rating >= ovrReq.min) && (ovrReq.max == null || p.rating <= ovrReq.max));\n  const filtered = pool.filter(inRange);\n  for (const p of filtered) p.cost = cardCost(p, priceTable);\n  return filtered;\n}\n\nfunction solve({ club, formation, reqs, priceTable = {}, useMarket = true, locked = [],\n  timeMs = 1200, seed = 12345, excludeIds = [] }) {\n  const rng = mulberry32(seed);\n  const ovrReq = reqs.find(r => r.t === 'ovr') || null;\n  const pool = buildPool(club, { priceTable, useMarket, ovrReq, excludeIds });\n  const N = formation.slots.length;\n  if (pool.length < N) {\n    return { ok: false, reason: `Only ${pool.length} eligible cards available — need ${N}. Add players to your club or enable market fodder.` };\n  }\n\n  // Locked slots: index -> pool uid that must stay.\n  const lockedIdx = new Map();\n  for (const { slot, id } of locked) {\n    const i = pool.findIndex(p => p.id === id && ![...lockedIdx.values()].includes(pool.indexOf(p)));\n    if (i >= 0) lockedIdx.set(slot, i);\n  }\n\n  // Indexes for \"neighbour\" moves that build links (chem / same-league etc.).\n  const byAttr = {};\n  for (const a of ATTRS) {\n    byAttr[a] = new Map();\n    pool.forEach((p, i) => {\n      if (p.generic || !p[a]) return;\n      if (!byAttr[a].has(p[a])) byAttr[a].set(p[a], []);\n      byAttr[a].get(p[a]).push(i);\n    });\n  }\n  const byPos = new Map();\n  pool.forEach((p, i) => (p.positions || []).forEach(pos => {\n    if (!byPos.has(pos)) byPos.set(pos, []);\n    byPos.get(pos).push(i);\n  }));\n  const byRating = new Map();\n  pool.forEach((p, i) => {\n    if (!byRating.has(p.rating)) byRating.set(p.rating, []);\n    byRating.get(p.rating).push(i);\n  });\n  const byCost = pool.map((_, i) => i).sort((a, b) => pool[a].cost - pool[b].cost);\n\n  const costScale = Math.max(100, median(pool.map(p => p.cost).filter(c => c > 1)) || 1000);\n  const W = 400; // requirement violations dominate cost\n\n  const energy = (assign) => {\n    const squad = assign.map(i => pool[i]);\n    const ev = evaluate(squad, formation, reqs);\n    const cost = squad.reduce((a, p) => a + p.cost, 0);\n    return { e: cost / costScale + ev.violation * W, cost, ev };\n  };\n\n  const randomInit = () => {\n    const used = new Set(lockedIdx.values());\n    const a = new Array(N);\n    for (const [s, i] of lockedIdx) a[s] = i;\n    for (let s = 0; s < N; s++) {\n      if (a[s] != null) continue;\n      // Prefer an in-position cheap card, else any cheap card.\n      const cands = (byPos.get(formation.slots[s].pos) || []).filter(i => !used.has(i));\n      let pick;\n      if (cands.length && rng() < 0.7) pick = cands[Math.floor(rng() * Math.min(cands.length, 40))];\n      if (pick == null) {\n        const free = byCost.filter(i => !used.has(i));\n        pick = free[Math.floor(rng() * Math.min(free.length, 60))];\n      }\n      a[s] = pick; used.add(pick);\n    }\n    return a;\n  };\n\n  const freeSlots = [...Array(N).keys()].filter(s => !lockedIdx.has(s));\n  const deadline = Date.now() + timeMs;\n  let best = null;\n  let restarts = 0;\n\n  while (Date.now() < deadline && freeSlots.length) {\n    restarts++;\n    let cur = randomInit();\n    let used = new Set(cur);\n    let curE = energy(cur);\n    if (!best || curE.e < best.e) best = { ...curE, assign: cur.slice() };\n    let T = 3;\n    const iters = 6000;\n    for (let it = 0; it < iters; it++) {\n      if ((it & 255) === 0 && Date.now() > deadline) break;\n      const next = cur.slice();\n      const r = rng();\n      const s = freeSlots[Math.floor(rng() * freeSlots.length)];\n      if (r < 0.25 && freeSlots.length > 1) {\n        // swap two slots (fixes positions -> chem)\n        const s2 = freeSlots[Math.floor(rng() * freeSlots.length)];\n        [next[s], next[s2]] = [next[s2], next[s]];\n      } else {\n        let cand;\n        if (r < 0.55) {\n          // link move: share nation/league/club with another squad member\n          const other = pool[cur[Math.floor(rng() * N)]];\n          const a = ATTRS[Math.floor(rng() * 3)];\n          const list = other && !other.generic ? byAttr[a].get(other[a]) : null;\n          if (list && list.length) cand = list[Math.floor(rng() * list.length)];\n        } else if (r < 0.7) {\n          const list = byPos.get(formation.slots[s].pos);\n          if (list && list.length) cand = list[Math.floor(rng() * list.length)];\n        } else if (r < 0.8) {\n          cand = byCost[Math.floor(rng() * Math.min(byCost.length, 80))];\n        } else if (r < 0.92) {\n          // rating nudge: similar rating, one up or one down\n          const target = pool[cur[s]].rating + (rng() < 0.6 ? 1 : -1) * (1 + Math.floor(rng() * 2));\n          const list = byRating.get(target);\n          if (list && list.length) cand = list[Math.floor(rng() * list.length)];\n        }\n        if (cand == null) cand = Math.floor(rng() * pool.length);\n        if (used.has(cand)) continue;\n        next[s] = cand;\n      }\n      const nE = energy(next);\n      if (nE.e <= curE.e || rng() < Math.exp((curE.e - nE.e) / T)) {\n        cur = next; curE = nE; used = new Set(cur);\n        if (curE.e < best.e) best = { ...curE, assign: cur.slice() };\n      }\n      T *= 0.9993;\n    }\n  }\n  if (!best) best = { ...energy(randomInit()), assign: null };\n  if (!best.assign) best.assign = randomInit();\n\n  // Polish: greedy single-slot replacements with cheaper cards that keep validity.\n  polish(best, pool, freeSlots, energy);\n\n  const squad = best.assign.map(i => pool[i]);\n  const ev = evaluate(squad, formation, reqs);\n  return {\n    ok: ev.ok,\n    squad,\n    eval: ev,\n    cost: squad.reduce((a, p) => a + p.cost, 0),\n    buyCost: squad.filter(p => p.source === 'market').reduce((a, p) => a + p.price, 0),\n    restarts,\n    reason: ev.ok ? null : 'No valid squad found with the cards available. See which requirements still fail below.',\n  };\n}\n\nfunction polish(best, pool, freeSlots, energy) {\n  let improved = true, rounds = 0;\n  while (improved && rounds++ < 4) {\n    improved = false;\n    const used = new Set(best.assign);\n    for (const s of freeSlots) {\n      for (let i = 0; i < pool.length; i++) {\n        if (used.has(i) || pool[i].cost >= pool[best.assign[s]].cost) continue;\n        const next = best.assign.slice(); next[s] = i;\n        const e = energy(next);\n        if (e.e < best.e - 1e-9 && e.ev.violation <= best.ev.violation) {\n          used.delete(best.assign[s]); used.add(i);\n          Object.assign(best, e, { assign: next });\n          improved = true;\n        }\n      }\n    }\n  }\n}\n\nfunction median(arr) {\n  if (!arr.length) return 0;\n  const s = arr.slice().sort((a, b) => a - b);\n  return s[Math.floor(s.length / 2)];\n}\n\nreturn { ATTRS, quality, teamRatingRaw, teamRating, inPosition, chemistry, describeReq, evaluate, priceStep, roundToMarket, EA_TAX, afterTax, cardCost, buildPool, solve };\n})();\n\nself.onmessage = (e) => {\n  try { self.postMessage({ ok: true, result: __m.engine.solve(e.data) }); }\n  catch (err) { self.postMessage({ ok: false, error: String(err && err.message || err) }); }\n};";
+const __m = {};
+__m.data = (() => {
+// Static data: formations, SBC templates, default fodder prices, sample club.
+// The sample club is FICTIONAL (made-up names and clubs) and exists only so the
+// app can be tried before importing your own club.
+
+const S = (pos, x, y) => ({ pos, x, y });
+
+const FORMATIONS = {
+  '4-3-3': [S('GK', 50, 90), S('LB', 14, 70), S('CB', 38, 74), S('CB', 62, 74), S('RB', 86, 70),
+    S('CM', 28, 50), S('CM', 50, 54), S('CM', 72, 50), S('LW', 18, 24), S('ST', 50, 16), S('RW', 82, 24)],
+  '4-4-2': [S('GK', 50, 90), S('LB', 14, 70), S('CB', 38, 74), S('CB', 62, 74), S('RB', 86, 70),
+    S('LM', 14, 44), S('CM', 38, 50), S('CM', 62, 50), S('RM', 86, 44), S('ST', 36, 18), S('ST', 64, 18)],
+  '4-2-3-1': [S('GK', 50, 90), S('LB', 14, 70), S('CB', 38, 74), S('CB', 62, 74), S('RB', 86, 70),
+    S('CDM', 36, 56), S('CDM', 64, 56), S('LM', 16, 34), S('CAM', 50, 36), S('RM', 84, 34), S('ST', 50, 14)],
+  '4-1-2-1-2': [S('GK', 50, 90), S('LB', 14, 70), S('CB', 38, 74), S('CB', 62, 74), S('RB', 86, 70),
+    S('CDM', 50, 58), S('CM', 26, 46), S('CM', 74, 46), S('CAM', 50, 34), S('ST', 36, 16), S('ST', 64, 16)],
+  '3-5-2': [S('GK', 50, 90), S('CB', 26, 74), S('CB', 50, 76), S('CB', 74, 74),
+    S('LM', 10, 46), S('CDM', 38, 56), S('CDM', 62, 56), S('RM', 90, 46), S('CAM', 50, 36),
+    S('ST', 36, 16), S('ST', 64, 16)],
+  '5-2-1-2': [S('GK', 50, 90), S('LWB', 10, 62), S('CB', 30, 74), S('CB', 50, 76), S('CB', 70, 74), S('RWB', 90, 62),
+    S('CM', 34, 50), S('CM', 66, 50), S('CAM', 50, 34), S('ST', 36, 16), S('ST', 64, 16)],
+};
+
+function formation(name) {
+  return { name, slots: FORMATIONS[name] || FORMATIONS['4-3-3'] };
+}
+
+// Default "any card" fodder prices by rating. Users should edit these to the
+// current market — the app does NOT scrape prices or log into any account.
+const DEFAULT_PRICES = {
+  75: 400, 76: 450, 77: 500, 78: 600, 79: 700, 80: 900, 81: 1200, 82: 1600, 83: 2400,
+  84: 4200, 85: 7500, 86: 12000, 87: 17000, 88: 26000, 89: 38000, 90: 55000,
+};
+
+// Generic challenge templates (pattern-based, not copies of specific in-game SBCs).
+const TEMPLATES = [
+  { id: 't-rating-83', name: 'Rating squad · 83', formation: '4-3-3', reqs: [{ t: 'rating', n: 83 }] },
+  { id: 't-rating-85', name: 'Rating squad · 85', formation: '4-3-3', reqs: [{ t: 'rating', n: 85 }] },
+  { id: 't-rating-87', name: 'Rating squad · 87', formation: '4-4-2', reqs: [{ t: 'rating', n: 87 }] },
+  { id: 't-league-nation', name: 'League & nation mix', formation: '4-4-2', reqs: [
+    { t: 'distinct', attr: 'league', op: 'min', n: 3 },
+    { t: 'distinct', attr: 'nation', op: 'min', n: 3 },
+    { t: 'same', attr: 'club', op: 'max', n: 3 },
+    { t: 'count', attr: 'quality', value: 'gold', op: 'min', n: 11 },
+    { t: 'chem', n: 18 },
+  ] },
+  { id: 't-hybrid', name: 'Hybrid leagues', formation: '4-2-3-1', reqs: [
+    { t: 'distinct', attr: 'league', op: 'min', n: 5 },
+    { t: 'same', attr: 'league', op: 'max', n: 3 },
+    { t: 'rating', n: 80 },
+    { t: 'chem', n: 20 },
+  ] },
+  { id: 't-first-xi', name: 'First XI', formation: '4-3-3', reqs: [
+    { t: 'same', attr: 'nation', op: 'min', n: 4 },
+    { t: 'same', attr: 'league', op: 'min', n: 5 },
+    { t: 'count', attr: 'rare', op: 'min', n: 3 },
+    { t: 'rating', n: 82 },
+    { t: 'chem', n: 25 },
+  ] },
+  { id: 't-silver', name: 'Silver stars', formation: '4-4-2', reqs: [
+    { t: 'ovr', min: 65, max: 74 },
+    { t: 'count', attr: 'quality', value: 'silver', op: 'exact', n: 11 },
+    { t: 'chem', n: 15 },
+  ] },
+  { id: 't-full-chem', name: 'Perfect links (33 chem)', formation: '4-3-3', reqs: [
+    { t: 'chem', n: 33 },
+    { t: 'rating', n: 78 },
+  ] },
+];
+
+// --- sample club (fictional) ------------------------------------------------
+const FIRST = ['Leo', 'Mateo', 'Jonah', 'Ilias', 'Tomas', 'Kofi', 'Rui', 'Anders', 'Luca', 'Yann', 'Diego', 'Emil',
+  'Sami', 'Noah', 'Felix', 'Hugo', 'Marco', 'Ivan', 'Theo', 'Kenji', 'Omar', 'Pablo', 'Bastian', 'Nico', 'Adrien'];
+const LAST = ['Varela', 'Brandt', 'Okafor', 'Lindqvist', 'Moreau', 'Castell', 'Novak', 'Ferro', 'Halden', 'Duarte',
+  'Kessler', 'Mbeki', 'Rossetti', 'Sandoval', 'Aaltonen', 'Weir', 'Calder', 'Mendez', 'Petrov', 'Ishida',
+  'Lambert', 'Quint', 'Barros', 'Hughes', 'Vidal', 'Strand', 'Ortega', 'Bianchi', 'Kovac', 'Dumont'];
+
+const LEAGUES = {
+  'Premier League': { nations: ['England', 'France', 'Brazil', 'Netherlands'], clubs: ['Northbridge FC', 'Harbour City', 'Ashford Rovers', 'Kingsmere United'] },
+  'LALIGA': { nations: ['Spain', 'Argentina', 'Portugal', 'France'], clubs: ['Real Costa', 'Atlético Sierra', 'CD Marina'] },
+  'Serie A': { nations: ['Italy', 'Argentina', 'Brazil', 'Croatia'], clubs: ['AC Lagoon', 'Sporting Verona', 'Torre FC'] },
+  'Bundesliga': { nations: ['Germany', 'Netherlands', 'Croatia', 'England'], clubs: ['FC Rheinwald', 'Borussia Nordtal', 'SV Alpen'] },
+  'Ligue 1': { nations: ['France', 'Portugal', 'Morocco', 'Brazil'], clubs: ['Olympique Azur', 'Stade Lumière', 'AS Côte'] },
+  'Eredivisie': { nations: ['Netherlands', 'Morocco', 'Germany'], clubs: ['Polder FC', 'Haven Utd'] },
+  'Liga Portugal': { nations: ['Portugal', 'Brazil', 'Spain'], clubs: ['SC Atlântico', 'FC Douro'] },
+  'MLS': { nations: ['United States', 'Argentina', 'England'], clubs: ['Pacific Coast SC', 'Lakeshore FC'] },
+};
+
+const POS_GROUPS = [
+  ['GK'], ['GK'], ['CB'], ['CB'], ['CB', 'CDM'], ['LB', 'LWB', 'LM'], ['RB', 'RWB', 'RM'],
+  ['CDM', 'CM'], ['CM', 'CAM'], ['CM', 'CDM'], ['CAM', 'CM'], ['LW', 'LM'], ['RW', 'RM'],
+  ['ST'], ['ST', 'CF'], ['LM', 'LW', 'LWB'], ['RM', 'RW', 'RWB'], ['CB', 'RB'],
+];
+
+function rng(seed) {
+  let a = seed;
+  return () => { a = (a * 1664525 + 1013904223) % 4294967296; return a / 4294967296; };
+}
+
+function sampleClub() {
+  const r = rng(27);
+  const pick = arr => arr[Math.floor(r() * arr.length)];
+  const leagues = Object.keys(LEAGUES);
+  const out = [];
+  for (let i = 0; i < 160; i++) {
+    const league = pick(leagues);
+    const L = LEAGUES[league];
+    // rating distribution weighted towards 70–84
+    const base = 62 + Math.floor(r() * 18) + Math.floor(r() * 8);
+    const rating = Math.min(91, base + (r() < 0.12 ? 4 : 0));
+    const rare = rating >= 75 ? r() < 0.7 : r() < 0.35;
+    const untradeable = r() < 0.4;
+    out.push({
+      id: `s${i + 1}`,
+      name: `${pick(FIRST)} ${pick(LAST)}`,
+      rating,
+      positions: pick(POS_GROUPS),
+      nation: pick(L.nations),
+      league,
+      club: pick(L.clubs),
+      rarity: rare ? 'rare' : 'common',
+      rare,
+      untradeable,
+      count: r() < 0.08 ? 2 : 1,
+      price: 0,
+      protected: false,
+    });
+  }
+  // a couple of special cards
+  out.push({ id: 's-icon1', name: 'Henrik Vale', rating: 89, positions: ['CM', 'CDM'], nation: 'Netherlands', league: 'Icons', club: 'ICON', rarity: 'icon', rare: true, untradeable: true, count: 1, price: 0, protected: true });
+  out.push({ id: 's-hero1', name: 'Dario Lentini', rating: 87, positions: ['ST'], nation: 'Italy', league: 'Serie A', club: 'Hero', rarity: 'hero', rare: true, untradeable: false, count: 1, price: 95000, protected: true });
+  return out;
+}
+
+return { FORMATIONS, formation, DEFAULT_PRICES, TEMPLATES, sampleClub };
+})();
+
+__m.engine = (() => {
+// Pure game-logic engine: team rating, chemistry, SBC requirement checks,
+// and a local SBC solver. No DOM access so it can be unit-tested in Node.
+
+const ATTRS = ['nation', 'league', 'club'];
+
+function quality(rating) {
+  return rating >= 75 ? 'gold' : rating >= 65 ? 'silver' : 'bronze';
+}
+
+// ---------------------------------------------------------------------------
+// Team rating
+// FUT divides by 11, then adds "excess" for every player above the average.
+// We round DOWN (never up) so the app never claims a squad passes when the
+// game would reject it — a top complaint about the original app was failed
+// SBC submissions.
+function teamRatingRaw(ratings) {
+  const total = ratings.reduce((a, b) => a + (b || 0), 0);
+  const avg = total / 11;
+  let excess = 0;
+  for (const r of ratings) if (r && r > avg) excess += r - avg;
+  return (total + excess) / 11;
+}
+
+function teamRating(ratings) {
+  return Math.floor(Math.round(teamRatingRaw(ratings) * 1000) / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Chemistry (current system: 0–3 per player, 33 max)
+const CLUB_STEPS = [2, 5, 8];
+const NATION_STEPS = [2, 5, 8];
+const LEAGUE_STEPS = [3, 5, 8];
+
+function steps(count, thresholds) {
+  let p = 0;
+  for (const t of thresholds) if (count >= t) p++;
+  return p;
+}
+
+function inPosition(player, slotPos) {
+  return !!player && Array.isArray(player.positions) && player.positions.includes(slotPos);
+}
+
+// squad: array aligned with formation.slots, entries may be null.
+function chemistry(squad, formation) {
+  const club = new Map(), nation = new Map(), league = new Map();
+  let iconLeagueBonus = 0;
+  const add = (m, k, n) => { if (k) m.set(k, (m.get(k) || 0) + n); };
+
+  squad.forEach((p, i) => {
+    if (!p || p.generic || !inPosition(p, formation.slots[i].pos)) return;
+    const r = p.rarity;
+    if (r === 'icon') {
+      add(nation, p.nation, 2);
+      iconLeagueBonus += 1;
+    } else if (r === 'hero') {
+      add(nation, p.nation, 1);
+      add(league, p.league, 2);
+      add(club, p.club, 1);
+    } else {
+      add(nation, p.nation, 1);
+      add(league, p.league, 1);
+      add(club, p.club, 1);
+    }
+  });
+
+  const per = squad.map((p, i) => {
+    if (!p || p.generic) return 0;
+    if (!inPosition(p, formation.slots[i].pos)) return 0;
+    if (p.rarity === 'icon' || p.rarity === 'hero') return 3;
+    const lg = (league.get(p.league) || 0) + iconLeagueBonus;
+    const pts = steps(club.get(p.club) || 0, CLUB_STEPS)
+      + steps(nation.get(p.nation) || 0, NATION_STEPS)
+      + steps(lg, LEAGUE_STEPS);
+    return Math.min(3, pts);
+  });
+  return { total: per.reduce((a, b) => a + b, 0), per };
+}
+
+// ---------------------------------------------------------------------------
+// Requirements
+// Types:
+//   {t:'rating', n}                      min team rating
+//   {t:'chem', n}                        min total chemistry
+//   {t:'playerChem', n}                  every player has at least n chem
+//   {t:'count', attr, value, op, n}      attr in nation|league|club|rarity|quality|rare
+//   {t:'same', attr, op, n}              min/max players from the SAME attr value
+//   {t:'distinct', attr, op, n}          min/max DIFFERENT attr values
+//   {t:'ovr', min, max}                  every player's rating within bounds
+const OPS = { min: 'Min', max: 'Max', exact: 'Exactly' };
+const ATTR_LABEL = { nation: 'nation', league: 'league', club: 'club', rarity: 'rarity', quality: 'quality', rare: 'rare' };
+
+function describeReq(r) {
+  switch (r.t) {
+    case 'rating': return `Team rating: min ${r.n}`;
+    case 'chem': return `Squad chemistry: min ${r.n}`;
+    case 'playerChem': return `Each player chemistry: min ${r.n}`;
+    case 'count':
+      if (r.attr === 'rare') return `${OPS[r.op]} ${r.n} rare player${r.n === 1 ? '' : 's'}`;
+      return `${OPS[r.op]} ${r.n} player${r.n === 1 ? '' : 's'} with ${ATTR_LABEL[r.attr]}: ${r.value}`;
+    case 'same': return `${OPS[r.op]} ${r.n} players from the same ${ATTR_LABEL[r.attr]}`;
+    case 'distinct': return `${OPS[r.op]} ${r.n} different ${ATTR_LABEL[r.attr]}s`;
+    case 'ovr': {
+      const parts = [];
+      if (r.min != null) parts.push(`min ${r.min}`);
+      if (r.max != null) parts.push(`max ${r.max}`);
+      return `Player rating: ${parts.join(', ')}`;
+    }
+    default: return 'Unknown requirement';
+  }
+}
+
+function attrValue(p, attr) {
+  if (!p) return null;
+  if (attr === 'quality') return quality(p.rating);
+  if (attr === 'rare') return p.rare ? true : null;
+  if (p.generic) return null; // "any card" fodder has no nation/league/club
+  return p[attr] ?? null;
+}
+
+function counts(squad, attr) {
+  const m = new Map();
+  for (const p of squad) {
+    const v = attrValue(p, attr);
+    if (v == null) continue;
+    m.set(v, (m.get(v) || 0) + 1);
+  }
+  return m;
+}
+
+function cmp(op, actual, n) {
+  if (op === 'min') return { ok: actual >= n, deficit: Math.max(0, n - actual) };
+  if (op === 'max') return { ok: actual <= n, deficit: Math.max(0, actual - n) };
+  return { ok: actual === n, deficit: Math.abs(actual - n) };
+}
+
+// Evaluates a full squad. Returns per-requirement results with a numeric
+// deficit (0 = satisfied) that the solver uses as a gradient.
+function evaluate(squad, formation, reqs) {
+  const ratings = squad.map(p => (p ? p.rating : 0));
+  const rawRating = teamRatingRaw(ratings);
+  const rating = teamRating(ratings);
+  const chem = chemistry(squad, formation);
+  const filled = squad.filter(Boolean).length;
+
+  const results = reqs.map(r => {
+    let actual, res;
+    switch (r.t) {
+      case 'rating':
+        actual = rating;
+        res = { ok: rating >= r.n, deficit: rating >= r.n ? 0 : Math.max(0.05, r.n - rawRating) };
+        break;
+      case 'chem':
+        actual = chem.total;
+        res = cmp('min', chem.total, r.n);
+        break;
+      case 'playerChem': {
+        const short = chem.per.reduce((a, c, i) => a + (squad[i] ? Math.max(0, r.n - c) : 0), 0);
+        actual = Math.min(...chem.per.filter((_, i) => squad[i]), 3);
+        res = { ok: short === 0, deficit: short };
+        break;
+      }
+      case 'count': {
+        const c = r.attr === 'rare'
+          ? squad.filter(p => p && p.rare).length
+          : (counts(squad, r.attr).get(r.value) || 0);
+        actual = c;
+        res = cmp(r.op, c, r.n);
+        break;
+      }
+      case 'same': {
+        const m = counts(squad, r.attr);
+        const top = m.size ? Math.max(...m.values()) : 0;
+        actual = top;
+        if (r.op === 'max') {
+          let over = 0;
+          for (const v of m.values()) over += Math.max(0, v - r.n);
+          res = { ok: over === 0, deficit: over };
+        } else res = cmp(r.op, top, r.n);
+        break;
+      }
+      case 'distinct': {
+        const d = counts(squad, r.attr).size;
+        actual = d;
+        res = cmp(r.op, d, r.n);
+        break;
+      }
+      case 'ovr': {
+        let bad = 0;
+        for (const p of squad) {
+          if (!p) continue;
+          if (r.min != null && p.rating < r.min) bad += r.min - p.rating;
+          if (r.max != null && p.rating > r.max) bad += p.rating - r.max;
+        }
+        actual = bad ? 'out of range' : 'ok';
+        res = { ok: bad === 0, deficit: bad };
+        break;
+      }
+      default:
+        res = { ok: true, deficit: 0 };
+    }
+    return { req: r, label: describeReq(r), actual, ...res };
+  });
+
+  const missing = 11 - filled;
+  results.unshift({
+    req: { t: 'size' }, label: 'Squad has 11 players', actual: filled,
+    ok: missing === 0, deficit: missing * 5,
+  });
+
+  return {
+    rating, rawRating, chem,
+    results,
+    ok: results.every(r => r.ok),
+    violation: results.reduce((a, r) => a + r.deficit, 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Market price helpers
+
+// Transfer-market price steps (prices must land on these increments).
+function priceStep(price) {
+  if (price < 1000) return 50;
+  if (price < 10000) return 100;
+  if (price < 50000) return 250;
+  if (price < 100000) return 500;
+  return 1000;
+}
+
+function roundToMarket(price, dir = 'nearest') {
+  price = Math.max(150, price);
+  const s = priceStep(price);
+  const f = dir === 'down' ? Math.floor : dir === 'up' ? Math.ceil : Math.round;
+  return Math.max(150, f(price / s) * s);
+}
+
+const EA_TAX = 0.05;
+const afterTax = p => Math.floor(p * (1 - EA_TAX));
+
+// ---------------------------------------------------------------------------
+// Solver
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// What a card "costs" to put into an SBC.
+//  - Protected cards are never used.
+//  - Untradeables are free (they can't be sold anyway) — used first.
+//  - Duplicates are discounted so they get cleared first.
+//  - Tradeable club cards cost what you'd get selling them (after 5% tax).
+//  - Market buys cost the full price.
+function cardCost(p, priceTable) {
+  const est = p.price || priceTable[p.rating] || 0;
+  if (p.generic) return est;
+  if (p.untradeable) return p.rating * 0.01 + (p.duplicate ? 0 : 0.5);
+  const v = afterTax(est);
+  return p.duplicate ? v * 0.6 : v;
+}
+
+function buildPool(club, opts = {}) {
+  const { priceTable = {}, useMarket = true, ovrReq = null, excludeIds = [] } = opts;
+  const ex = new Set(excludeIds);
+  const pool = [];
+  for (const p of club) {
+    if (p.protected || ex.has(p.id)) continue;
+    const copies = Math.max(1, p.count || 1);
+    for (let k = 0; k < copies; k++) {
+      pool.push({ ...p, uid: `${p.id}#${k}`, duplicate: p.duplicate || k > 0, source: 'club' });
+    }
+  }
+  if (useMarket) {
+    for (const [rStr, price] of Object.entries(priceTable)) {
+      const r = +rStr;
+      if (!price) continue;
+      for (let k = 0; k < 11; k++) {
+        pool.push({
+          id: `any-${r}`, uid: `any-${r}#${k}`, name: `Any ${r}-rated card`, rating: r,
+          positions: [], generic: true, rare: false, price, source: 'market',
+        });
+      }
+    }
+  }
+  const inRange = p => !ovrReq
+    || ((ovrReq.min == null || p.rating >= ovrReq.min) && (ovrReq.max == null || p.rating <= ovrReq.max));
+  const filtered = pool.filter(inRange);
+  for (const p of filtered) p.cost = cardCost(p, priceTable);
+  return filtered;
+}
+
+function solve({ club, formation, reqs, priceTable = {}, useMarket = true, locked = [],
+  timeMs = 1200, seed = 12345, excludeIds = [] }) {
+  const rng = mulberry32(seed);
+  const ovrReq = reqs.find(r => r.t === 'ovr') || null;
+  const pool = buildPool(club, { priceTable, useMarket, ovrReq, excludeIds });
+  const N = formation.slots.length;
+  if (pool.length < N) {
+    return { ok: false, reason: `Only ${pool.length} eligible cards available — need ${N}. Add players to your club or enable market fodder.` };
+  }
+
+  // Locked slots: index -> pool uid that must stay.
+  const lockedIdx = new Map();
+  for (const { slot, id } of locked) {
+    const i = pool.findIndex(p => p.id === id && ![...lockedIdx.values()].includes(pool.indexOf(p)));
+    if (i >= 0) lockedIdx.set(slot, i);
+  }
+
+  // Indexes for "neighbour" moves that build links (chem / same-league etc.).
+  const byAttr = {};
+  for (const a of ATTRS) {
+    byAttr[a] = new Map();
+    pool.forEach((p, i) => {
+      if (p.generic || !p[a]) return;
+      if (!byAttr[a].has(p[a])) byAttr[a].set(p[a], []);
+      byAttr[a].get(p[a]).push(i);
+    });
+  }
+  const byPos = new Map();
+  pool.forEach((p, i) => (p.positions || []).forEach(pos => {
+    if (!byPos.has(pos)) byPos.set(pos, []);
+    byPos.get(pos).push(i);
+  }));
+  const byRating = new Map();
+  pool.forEach((p, i) => {
+    if (!byRating.has(p.rating)) byRating.set(p.rating, []);
+    byRating.get(p.rating).push(i);
+  });
+  const byCost = pool.map((_, i) => i).sort((a, b) => pool[a].cost - pool[b].cost);
+
+  const costScale = Math.max(100, median(pool.map(p => p.cost).filter(c => c > 1)) || 1000);
+  const W = 400; // requirement violations dominate cost
+
+  const energy = (assign) => {
+    const squad = assign.map(i => pool[i]);
+    const ev = evaluate(squad, formation, reqs);
+    const cost = squad.reduce((a, p) => a + p.cost, 0);
+    return { e: cost / costScale + ev.violation * W, cost, ev };
+  };
+
+  const randomInit = () => {
+    const used = new Set(lockedIdx.values());
+    const a = new Array(N);
+    for (const [s, i] of lockedIdx) a[s] = i;
+    for (let s = 0; s < N; s++) {
+      if (a[s] != null) continue;
+      // Prefer an in-position cheap card, else any cheap card.
+      const cands = (byPos.get(formation.slots[s].pos) || []).filter(i => !used.has(i));
+      let pick;
+      if (cands.length && rng() < 0.7) pick = cands[Math.floor(rng() * Math.min(cands.length, 40))];
+      if (pick == null) {
+        const free = byCost.filter(i => !used.has(i));
+        pick = free[Math.floor(rng() * Math.min(free.length, 60))];
+      }
+      a[s] = pick; used.add(pick);
+    }
+    return a;
+  };
+
+  const freeSlots = [...Array(N).keys()].filter(s => !lockedIdx.has(s));
+  const deadline = Date.now() + timeMs;
+  let best = null;
+  let restarts = 0;
+
+  while (Date.now() < deadline && freeSlots.length) {
+    restarts++;
+    let cur = randomInit();
+    let used = new Set(cur);
+    let curE = energy(cur);
+    if (!best || curE.e < best.e) best = { ...curE, assign: cur.slice() };
+    let T = 3;
+    const iters = 6000;
+    for (let it = 0; it < iters; it++) {
+      if ((it & 255) === 0 && Date.now() > deadline) break;
+      const next = cur.slice();
+      const r = rng();
+      const s = freeSlots[Math.floor(rng() * freeSlots.length)];
+      if (r < 0.25 && freeSlots.length > 1) {
+        // swap two slots (fixes positions -> chem)
+        const s2 = freeSlots[Math.floor(rng() * freeSlots.length)];
+        [next[s], next[s2]] = [next[s2], next[s]];
+      } else {
+        let cand;
+        if (r < 0.55) {
+          // link move: share nation/league/club with another squad member
+          const other = pool[cur[Math.floor(rng() * N)]];
+          const a = ATTRS[Math.floor(rng() * 3)];
+          const list = other && !other.generic ? byAttr[a].get(other[a]) : null;
+          if (list && list.length) cand = list[Math.floor(rng() * list.length)];
+        } else if (r < 0.7) {
+          const list = byPos.get(formation.slots[s].pos);
+          if (list && list.length) cand = list[Math.floor(rng() * list.length)];
+        } else if (r < 0.8) {
+          cand = byCost[Math.floor(rng() * Math.min(byCost.length, 80))];
+        } else if (r < 0.92) {
+          // rating nudge: similar rating, one up or one down
+          const target = pool[cur[s]].rating + (rng() < 0.6 ? 1 : -1) * (1 + Math.floor(rng() * 2));
+          const list = byRating.get(target);
+          if (list && list.length) cand = list[Math.floor(rng() * list.length)];
+        }
+        if (cand == null) cand = Math.floor(rng() * pool.length);
+        if (used.has(cand)) continue;
+        next[s] = cand;
+      }
+      const nE = energy(next);
+      if (nE.e <= curE.e || rng() < Math.exp((curE.e - nE.e) / T)) {
+        cur = next; curE = nE; used = new Set(cur);
+        if (curE.e < best.e) best = { ...curE, assign: cur.slice() };
+      }
+      T *= 0.9993;
+    }
+  }
+  if (!best) best = { ...energy(randomInit()), assign: null };
+  if (!best.assign) best.assign = randomInit();
+
+  // Polish: greedy single-slot replacements with cheaper cards that keep validity.
+  polish(best, pool, freeSlots, energy);
+
+  const squad = best.assign.map(i => pool[i]);
+  const ev = evaluate(squad, formation, reqs);
+  return {
+    ok: ev.ok,
+    squad,
+    eval: ev,
+    cost: squad.reduce((a, p) => a + p.cost, 0),
+    buyCost: squad.filter(p => p.source === 'market').reduce((a, p) => a + p.price, 0),
+    restarts,
+    reason: ev.ok ? null : 'No valid squad found with the cards available. See which requirements still fail below.',
+  };
+}
+
+function polish(best, pool, freeSlots, energy) {
+  let improved = true, rounds = 0;
+  while (improved && rounds++ < 4) {
+    improved = false;
+    const used = new Set(best.assign);
+    for (const s of freeSlots) {
+      for (let i = 0; i < pool.length; i++) {
+        if (used.has(i) || pool[i].cost >= pool[best.assign[s]].cost) continue;
+        const next = best.assign.slice(); next[s] = i;
+        const e = energy(next);
+        if (e.e < best.e - 1e-9 && e.ev.violation <= best.ev.violation) {
+          used.delete(best.assign[s]); used.add(i);
+          Object.assign(best, e, { assign: next });
+          improved = true;
+        }
+      }
+    }
+  }
+}
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = arr.slice().sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+return { ATTRS, quality, teamRatingRaw, teamRating, inPosition, chemistry, describeReq, evaluate, priceStep, roundToMarket, EA_TAX, afterTax, cardCost, buildPool, solve };
+})();
+
+__m.store = (() => {
+// Local persistence. Everything stays on the device — no account, no server.
+const { DEFAULT_PRICES } = __m.data;
+
+const KEY = 'squadsage:v1';
+
+function defaultState() {
+  return {
+    club: [],
+    trades: [],
+    savedSbcs: [],
+    history: [],
+    squad: { formation: '4-3-3', ids: Array(11).fill(null) },
+    prices: { ...DEFAULT_PRICES },
+    settings: { useMarket: true, thorough: false },
+  };
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return defaultState();
+    return { ...defaultState(), ...JSON.parse(raw) };
+  } catch {
+    return defaultState();
+  }
+}
+
+function save(state) {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); return true; } catch { return false; }
+}
+
+// --- CSV --------------------------------------------------------------------
+const CSV_HEADER = 'name,rating,positions,nation,league,club,rarity,untradeable,count,price,protected';
+
+function splitCsvLine(line) {
+  const out = []; let cur = ''; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') q = false;
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+
+const truthy = v => /^(1|y|yes|true|x)$/i.test(String(v || '').trim());
+
+// Returns { players, errors } — bad rows are reported, not silently dropped.
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return { players: [], errors: ['File is empty'] };
+  let header = splitCsvLine(lines[0]).map(h => h.toLowerCase());
+  let start = 1;
+  if (!header.includes('name') || !header.includes('rating')) {
+    header = CSV_HEADER.split(',');
+    start = 0;
+  }
+  const idx = k => header.indexOf(k);
+  const players = []; const errors = [];
+  for (let i = start; i < lines.length; i++) {
+    const c = splitCsvLine(lines[i]);
+    const get = k => (idx(k) >= 0 ? c[idx(k)] : '');
+    const rating = parseInt(get('rating'), 10);
+    const name = get('name');
+    if (!name || !(rating >= 1 && rating <= 99)) {
+      errors.push(`Line ${i + 1}: needs a name and a rating 1–99`);
+      continue;
+    }
+    const rarity = (get('rarity') || 'common').toLowerCase();
+    players.push({
+      id: `p${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      rating,
+      positions: (get('positions') || '').split(/[|/ ;]+/).map(s => s.toUpperCase()).filter(Boolean),
+      nation: get('nation'),
+      league: get('league'),
+      club: get('club'),
+      rarity,
+      rare: rarity !== 'common',
+      untradeable: truthy(get('untradeable')),
+      count: Math.max(1, parseInt(get('count'), 10) || 1),
+      price: Math.max(0, parseInt(get('price'), 10) || 0),
+      protected: truthy(get('protected')),
+    });
+  }
+  return { players, errors };
+}
+
+const esc = v => {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+function toCsv(club) {
+  return [CSV_HEADER, ...club.map(p => [
+    p.name, p.rating, (p.positions || []).join('|'), p.nation, p.league, p.club, p.rarity,
+    p.untradeable ? 'yes' : 'no', p.count || 1, p.price || 0, p.protected ? 'yes' : 'no',
+  ].map(esc).join(','))].join('\n');
+}
+
+function download(filename, text, type = 'text/plain') {
+  const blob = new Blob([text], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+return { defaultState, load, save, CSV_HEADER, parseCsv, toCsv, download };
+})();
+
+__m.app = (() => {
+const E = __m.engine;
+const { FORMATIONS, formation, TEMPLATES, sampleClub, DEFAULT_PRICES } = __m.data;
+const Store = __m.store;
+
+let S = Store.load();
+
+const ui = {
+  tab: 'home',
+  sbc: { name: 'Custom SBC', formation: '4-3-3', reqs: [{ t: 'rating', n: 83 }], from: null },
+  newReq: { t: 'rating', op: 'min', n: 1, attr: 'league', value: '', min: '', max: '' },
+  result: null,
+  solving: false,
+  seed: 1,
+  undo: null,
+  clubQ: '', clubFilter: 'all', clubSort: 'rating',
+  pickSlot: null, pickQ: '',
+};
+
+// ---------------------------------------------------------------- helpers
+const $ = s => document.querySelector(s);
+const h = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Math.round(n || 0).toLocaleString();
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const clone = o => JSON.parse(JSON.stringify(o));
+
+function persist() {
+  if (!Store.save(S)) toast('Could not save — browser storage is full or blocked. Export a backup.', 'bad');
+}
+
+let toastTimer;
+function toast(msg, kind = '') {
+  const t = $('#toast');
+  t.className = `toast show ${kind}`;
+  t.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = 'toast'), 3200);
+}
+
+function openModal(html) {
+  const m = $('#modal');
+  $('#modal-body').innerHTML = html;
+  if (!m.open) m.showModal();
+}
+// In-app replacements for confirm()/prompt(), which embedded web views often block.
+const pending = {};
+function askConfirm(msg, yesLabel, onYes, danger = true) {
+  pending.yes = onYes;
+  openModal(`<h2>Are you sure?</h2><p>${h(msg)}</p>
+    <div class="row gap"><button class="btn ${danger ? 'danger' : 'primary'}" data-a="dlgYes">${h(yesLabel)}</button><button class="btn" data-a="close">Cancel</button></div>`);
+}
+function askNumber(title, value, okLabel, onOk) {
+  pending.num = onOk;
+  openModal(`<h2>${h(title)}</h2><form data-form="dlgNum"><label>Coins<input id="dlg-num" name="v" type="number" inputmode="numeric" min="0" value="${h(value)}" required></label>
+    <div class="row gap"><button class="btn primary">${h(okLabel)}</button><button type="button" class="btn" data-a="close">Cancel</button></div></form>`);
+  setTimeout(() => $('#dlg-num')?.select(), 30);
+}
+function showText(title, filename, text, type) {
+  pending.file = { filename, text, type };
+  openModal(`<h2>${h(title)}</h2>
+    <p class="hint">Copy this text and keep it somewhere safe, for example in a note.</p>
+    <textarea id="dlg-text" rows="10" readonly>${h(text)}</textarea>
+    <div class="row gap wrap"><button class="btn primary" data-a="dlgCopy">Copy</button>${globalThis.__SOLVER_SRC ? '' : '<button class="btn" data-a="dlgDownload">Download file</button>'}<button class="btn" data-a="close">Close</button></div>`);
+}
+
+function closeModal() { const m = $('#modal'); if (m.open) m.close(); ui.pickSlot = null; }
+
+const coin = '<span class="coin" aria-hidden="true"></span>';
+const qClass = r => E.quality(r);
+
+function uniqueValues(attr) {
+  return [...new Set(S.club.map(p => p[attr]).filter(Boolean))].sort();
+}
+
+function clubStats() {
+  let cards = 0, untr = 0, prot = 0, value = 0;
+  for (const p of S.club) {
+    const c = p.count || 1;
+    cards += c;
+    if (p.untradeable) untr += c;
+    if (p.protected) prot += c;
+    if (!p.untradeable) value += E.afterTax(p.price || S.prices[p.rating] || 0) * c;
+  }
+  return { cards, untr, prot, value };
+}
+
+function tradeStats() {
+  const t = { listed: 0, potIncome: 0, potProfit: 0, soldIncome: 0, soldProfit: 0, sold: 0, unsold: 0 };
+  for (const x of S.trades) {
+    if (x.status === 'listed') { t.listed++; t.potIncome += E.afterTax(x.list); t.potProfit += E.afterTax(x.list) - x.buy; }
+    if (x.status === 'unsold') t.unsold++;
+    if (x.status === 'sold') { t.sold++; t.soldIncome += E.afterTax(x.soldFor); t.soldProfit += E.afterTax(x.soldFor) - x.buy; }
+  }
+  return t;
+}
+
+// ---------------------------------------------------------------- components
+function card(p, chem, opts = {}) {
+  if (!p) return `<div class="pcard empty">${opts.label ? `<b>${h(opts.label)}</b>` : ''}<span>+</span></div>`;
+  const tags = [];
+  if (p.source === 'market') tags.push('<i class="tag buy">BUY</i>');
+  else if (p.untradeable) tags.push('<i class="tag ut">UT</i>');
+  if (p.duplicate) tags.push('<i class="tag dup">DUP</i>');
+  const pos = opts.label || (p.positions || [])[0] || '';
+  const chemDots = chem == null ? '' : `<span class="chem c${chem}" title="${chem} chemistry">${'◆'.repeat(chem)}${'◇'.repeat(3 - chem)}</span>`;
+  return `<div class="pcard ${qClass(p.rating)} ${p.rarity === 'icon' || p.rarity === 'hero' ? 'special' : ''} ${p.rare ? 'rare' : ''}">
+    <div class="pc-top"><b>${p.rating}</b><small>${h(pos)}</small></div>
+    <div class="pc-name">${h(p.generic ? `Any ${p.rating}` : p.name.split(' ').slice(-1)[0])}</div>
+    <div class="pc-meta">${p.generic ? 'market' : h((p.nation || '').slice(0, 3).toUpperCase())}</div>
+    ${chemDots}<div class="pc-tags">${tags.join('')}</div>
+  </div>`;
+}
+
+function pitch(squad, f, per, clickable) {
+  return `<div class="pitch" role="group" aria-label="Formation ${h(f.name)}">
+    <div class="pitch-lines"></div>
+    ${f.slots.map((s, i) => `<div class="slot" style="left:${s.x}%;top:${s.y}%">
+      ${clickable ? `<button class="slot-btn" data-a="pickSlot" data-i="${i}" aria-label="Choose ${s.pos}">` : ''}
+      ${card(squad[i], squad[i] ? per[i] : null, { label: s.pos })}
+      ${clickable ? '</button>' : ''}
+    </div>`).join('')}
+  </div>`;
+}
+
+function statTile(label, value, cls = '') {
+  return `<div class="stat ${cls}"><span>${h(label)}</span><b>${value}</b></div>`;
+}
+
+function select(name, options, current, attrs = '') {
+  return `<select ${attrs} data-in="${name}">${options.map(o => {
+    const [v, l] = Array.isArray(o) ? o : [o, o];
+    return `<option value="${h(v)}" ${String(v) === String(current) ? 'selected' : ''}>${h(l)}</option>`;
+  }).join('')}</select>`;
+}
+
+// ---------------------------------------------------------------- views
+const VIEWS = {
+  home() {
+    const c = clubStats();
+    const t = tradeStats();
+    const empty = !S.club.length;
+    return `
+      <section class="hero">
+        <h1>Your FUT companion that never touches your account.</h1>
+        <p>Unlimited SBC solving, squad building and trade tracking — on your device, offline, free.</p>
+        <div class="row gap">
+          <button class="btn primary" data-a="go" data-tab="sbc">Solve an SBC</button>
+          <button class="btn" data-a="go" data-tab="trades">Track trades</button>
+        </div>
+      </section>
+      ${empty ? `<div class="callout">
+        <b>Your club is empty.</b> Import your club as CSV, add players by hand, or try the app with a fictional sample club.
+        <div class="row gap"><button class="btn small primary" data-a="importOpen">Import club</button>
+        <button class="btn small" data-a="loadSample">Load sample club</button></div></div>` : ''}
+      <h2 class="sec">Club</h2>
+      <div class="stats">
+        ${statTile('Cards', fmt(c.cards))}
+        ${statTile('Untradeable', fmt(c.untr))}
+        ${statTile('Protected from SBCs', fmt(c.prot))}
+        ${statTile('Tradeable value (after tax)', `${fmt(c.value)} ${coin}`)}
+      </div>
+      <h2 class="sec">Trading</h2>
+      <div class="stats">
+        ${statTile('On the market', t.listed)}
+        ${statTile('Profit if all sell', `${t.potProfit >= 0 ? '+' : ''}${fmt(t.potProfit)} ${coin}`, t.potProfit >= 0 ? 'good' : 'bad')}
+        ${statTile('Banked profit', `${t.soldProfit >= 0 ? '+' : ''}${fmt(t.soldProfit)} ${coin}`, t.soldProfit >= 0 ? 'good' : 'bad')}
+        ${statTile('Waiting to relist', t.unsold)}
+      </div>
+      ${S.history.length ? `<h2 class="sec">Recent SBCs</h2><ul class="list">
+        ${S.history.slice(0, 5).map(x => `<li class="li"><div><b>${h(x.name)}</b><small>${new Date(x.at).toLocaleString()} · rating ${x.rating} · chem ${x.chem}</small></div>
+        <span class="muted">${x.buy ? `bought ${fmt(x.buy)} ${coin}` : 'club only'}</span></li>`).join('')}</ul>` : ''}
+      <h2 class="sec">Built from user reviews</h2>
+      <ul class="fixes">
+        <li><b>No login, no ban worries.</b> Nothing connects to your EA account — you apply the squad yourself.</li>
+        <li><b>No daily credits.</b> Solve as many times as you like; a failed attempt costs nothing.</li>
+        <li><b>Pre-checked squads.</b> Every requirement is verified and rating is rounded down, so “valid” really means valid.</li>
+        <li><b>Works when servers don't.</b> Installs as an app and runs fully offline.</li>
+        <li><b>No ads, no paywall, one price: free.</b></li>
+        <li><b>Your keepers stay yours.</b> Protect any card and the solver will never use it.</li>
+        <li><b>Clear trade numbers.</b> Every figure includes the 5% EA tax and says exactly what it means.</li>
+      </ul>`;
+  },
+
+  sbc() {
+    const s = ui.sbc;
+    const saved = S.savedSbcs || [];
+    const nr = ui.newReq;
+    const attrOpts = [['league', 'League'], ['nation', 'Nation'], ['club', 'Club'], ['rarity', 'Rarity'], ['quality', 'Quality']];
+    const valueList = nr.attr === 'quality' ? ['gold', 'silver', 'bronze'] : nr.attr === 'rarity' ? ['common', 'rare', 'icon', 'hero'] : uniqueValues(nr.attr);
+    let fields = '';
+    if (['rating', 'chem', 'playerChem'].includes(nr.t)) {
+      fields = `<label>Minimum<input type="number" inputmode="numeric" data-in="nr.n" value="${h(nr.n)}" min="0" max="${nr.t === 'rating' ? 99 : nr.t === 'chem' ? 33 : 3}"></label>`;
+    } else if (nr.t === 'count') {
+      fields = `<label>Rule${select('nr.op', [['min', 'At least'], ['max', 'At most'], ['exact', 'Exactly']], nr.op)}</label>
+        <label>Players<input type="number" inputmode="numeric" data-in="nr.n" value="${h(nr.n)}" min="0" max="11"></label>
+        <label>With${select('nr.attr', [...attrOpts, ['rare', 'Rare (any)']], nr.attr)}</label>
+        ${nr.attr === 'rare' ? '' : `<label>Value<input list="vals" data-in="nr.value" value="${h(nr.value)}" placeholder="e.g. ${h(valueList[0] || 'Premier League')}">
+        <datalist id="vals">${valueList.map(v => `<option value="${h(v)}">`).join('')}</datalist></label>`}`;
+    } else if (nr.t === 'same' || nr.t === 'distinct') {
+      fields = `<label>Rule${select('nr.op', [['min', 'At least'], ['max', 'At most'], ['exact', 'Exactly']], nr.op)}</label>
+        <label>Number<input type="number" inputmode="numeric" data-in="nr.n" value="${h(nr.n)}" min="0" max="11"></label>
+        <label>${nr.t === 'same' ? 'From same' : 'Different'}${select('nr.attr', attrOpts.slice(0, 3), nr.attr)}</label>`;
+    } else if (nr.t === 'ovr') {
+      fields = `<label>Min player rating<input type="number" data-in="nr.min" value="${h(nr.min)}" placeholder="—"></label>
+        <label>Max player rating<input type="number" data-in="nr.max" value="${h(nr.max)}" placeholder="—"></label>`;
+    }
+
+    return `
+      <h2 class="sec first">Pick a challenge</h2>
+      <div class="chips">
+        ${TEMPLATES.map(t => `<button class="chip ${s.from === t.id ? 'on' : ''}" data-a="tpl" data-id="${t.id}">${h(t.name)}</button>`).join('')}
+        ${saved.map(t => `<span class="chip-wrap"><button class="chip mine ${s.from === t.id ? 'on' : ''}" data-a="tpl" data-id="${t.id}">★ ${h(t.name)}</button><button class="chip-x" data-a="delSbc" data-id="${t.id}" aria-label="Delete ${h(t.name)}">×</button></span>`).join('')}
+      </div>
+
+      <div class="panel">
+        <div class="grid2">
+          <label>Name<input data-in="sbc.name" value="${h(s.name)}"></label>
+          <label>Formation${select('sbc.formation', Object.keys(FORMATIONS), s.formation)}</label>
+        </div>
+        <h3>Requirements</h3>
+        <ul class="reqs">
+          ${s.reqs.length ? s.reqs.map((r, i) => `<li><span>${h(E.describeReq(r))}</span><button class="icon-btn" data-a="rmReq" data-i="${i}" aria-label="Remove">×</button></li>`).join('') : '<li class="muted">No requirements yet — add one below.</li>'}
+        </ul>
+        <details class="addreq" ${s.reqs.length ? '' : 'open'}>
+          <summary>Add requirement</summary>
+          <div class="grid2">
+            <label>Type${select('nr.t', [['rating', 'Team rating'], ['chem', 'Squad chemistry'], ['playerChem', 'Chemistry per player'], ['count', 'Number of players with…'], ['same', 'Players from the same…'], ['distinct', 'Different leagues/nations/clubs'], ['ovr', 'Player rating range']], nr.t)}</label>
+            ${fields}
+          </div>
+          <button class="btn small" data-a="addReq">Add</button>
+        </details>
+        <div class="toggles">
+          <label class="switch"><input type="checkbox" data-in="set.useMarket" ${S.settings.useMarket ? 'checked' : ''}><span></span>Allow buying fodder from the market</label>
+          <label class="switch"><input type="checkbox" data-in="set.thorough" ${S.settings.thorough ? 'checked' : ''}><span></span>Thorough search (slower, cheaper results)</label>
+        </div>
+        <div class="row gap">
+          <button class="btn primary grow" data-a="solve" ${ui.solving ? 'disabled' : ''}>${ui.solving ? '<span class="spin"></span> Solving…' : 'Solve'}</button>
+          <button class="btn" data-a="saveSbc">Save</button>
+        </div>
+        <p class="hint">${fmt(clubStats().cards - clubStats().prot)} usable club cards · ${clubStats().prot} protected · solving is unlimited</p>
+      </div>
+      <div id="result">${renderResult()}</div>`;
+  },
+
+  squad() {
+    const f = formation(S.squad.formation);
+    const byId = new Map(S.club.map(p => [p.id, p]));
+    const squad = S.squad.ids.map(id => byId.get(id) || null);
+    const ev = E.evaluate(squad, f, []);
+    const filled = squad.filter(Boolean).length;
+    return `
+      <div class="row between center first">
+        <h2 class="sec flat">Squad builder</h2>
+        <label class="inline">${select('sq.formation', Object.keys(FORMATIONS), S.squad.formation)}</label>
+      </div>
+      <div class="stats three">
+        ${statTile('Rating', filled === 11 ? ev.rating : '—')}
+        ${statTile('Chemistry', `${ev.chem.total}/33`)}
+        ${statTile('Players', `${filled}/11`)}
+      </div>
+      ${pitch(squad, f, ev.chem.per, true)}
+      <p class="hint">Tap a position to pick a player. Players out of position get 0 chemistry.</p>
+      <div class="row gap"><button class="btn" data-a="clearSquad">Clear squad</button>
+      <button class="btn" data-a="squadToSbc">Use as SBC formation</button></div>`;
+  },
+
+  club() {
+    const q = ui.clubQ.toLowerCase();
+    let list = S.club.filter(p => !q || [p.name, p.nation, p.league, p.club, (p.positions || []).join(' ')].join(' ').toLowerCase().includes(q));
+    const f = ui.clubFilter;
+    if (f === 'untradeable') list = list.filter(p => p.untradeable);
+    if (f === 'tradeable') list = list.filter(p => !p.untradeable);
+    if (f === 'protected') list = list.filter(p => p.protected);
+    if (f === 'duplicates') list = list.filter(p => (p.count || 1) > 1);
+    const sorts = {
+      rating: (a, b) => b.rating - a.rating || a.name.localeCompare(b.name),
+      name: (a, b) => a.name.localeCompare(b.name),
+      value: (a, b) => (b.price || S.prices[b.rating] || 0) - (a.price || S.prices[a.rating] || 0),
+    };
+    list.sort(sorts[ui.clubSort]);
+    const shown = list.slice(0, 300);
+    return `
+      <div class="row between center first">
+        <h2 class="sec flat">My club <small class="muted">${fmt(clubStats().cards)} cards</small></h2>
+        <button class="btn small primary" data-a="editP">+ Add</button>
+      </div>
+      <div class="toolbar">
+        <input type="search" placeholder="Search name, nation, league, club, position" data-in="clubQ" value="${h(ui.clubQ)}" aria-label="Search club">
+        ${select('clubFilter', [['all', 'All'], ['untradeable', 'Untradeable'], ['tradeable', 'Tradeable'], ['protected', 'Protected'], ['duplicates', 'Duplicates']], ui.clubFilter, 'aria-label="Filter"')}
+        ${select('clubSort', [['rating', 'Rating'], ['name', 'Name'], ['value', 'Value']], ui.clubSort, 'aria-label="Sort"')}
+      </div>
+      <div class="row gap wrap">
+        <button class="btn small" data-a="importOpen">Import CSV</button>
+        <button class="btn small" data-a="exportCsv" ${S.club.length ? '' : 'disabled'}>Export CSV</button>
+        <button class="btn small" data-a="loadSample">Sample club</button>
+        <button class="btn small danger" data-a="clearClub" ${S.club.length ? '' : 'disabled'}>Clear</button>
+      </div>
+      <ul class="list">
+        ${shown.map(p => `<li class="li player">
+          <span class="badge ${qClass(p.rating)} ${p.rare ? 'rare' : ''}">${p.rating}</span>
+          <button class="li-main" data-a="editP" data-id="${p.id}">
+            <b>${h(p.name)}${(p.count || 1) > 1 ? ` <small class="muted">×${p.count}</small>` : ''}</b>
+            <small>${h((p.positions || []).join('/'))} · ${h(p.nation)} · ${h(p.league)} · ${h(p.club)}</small>
+          </button>
+          <span class="pills">${p.untradeable ? '<i class="tag ut">UT</i>' : ''}${p.rarity === 'icon' || p.rarity === 'hero' ? `<i class="tag sp">${h(p.rarity)}</i>` : ''}</span>
+          <button class="icon-btn ${p.protected ? 'on' : ''}" data-a="protect" data-id="${p.id}" aria-pressed="${p.protected}" title="${p.protected ? 'Protected — never used in SBCs' : 'Protect from SBCs'}">${p.protected ? '🔒' : '🔓'}</button>
+        </li>`).join('') || '<li class="li muted">No players match.</li>'}
+      </ul>
+      ${list.length > shown.length ? `<p class="hint">Showing first ${shown.length} of ${list.length}. Refine your search.</p>` : ''}`;
+  },
+
+  trades() {
+    const t = tradeStats();
+    const groups = { listed: [], unsold: [], sold: [] };
+    S.trades.forEach(x => groups[x.status]?.push(x));
+    const row = x => {
+      const sell = x.status === 'sold' ? x.soldFor : x.list;
+      const profit = E.afterTax(sell) - x.buy;
+      const breakeven = E.roundToMarket(Math.ceil(x.buy / (1 - E.EA_TAX)), 'up');
+      return `<li class="li trade">
+        <div class="grow"><b>${h(x.name)}</b>
+          <small>bought ${fmt(x.buy)} → ${x.status === 'sold' ? 'sold' : 'listed'} ${fmt(sell)} · break-even ${fmt(breakeven)}</small></div>
+        <span class="${profit >= 0 ? 'good' : 'bad'} num">${profit >= 0 ? '+' : ''}${fmt(profit)}</span>
+        <div class="acts">
+          ${x.status === 'listed' ? `<button class="btn tiny" data-a="tSold" data-id="${x.id}">Sold</button><button class="btn tiny" data-a="tUnsold" data-id="${x.id}">Expired</button>` : ''}
+          ${x.status === 'unsold' ? `<button class="btn tiny" data-a="tRelist" data-id="${x.id}">Relist</button>` : ''}
+          <button class="icon-btn" data-a="tDel" data-id="${x.id}" aria-label="Delete">×</button>
+        </div></li>`;
+    };
+    const sec = (title, arr, extra = '') => `<div class="row between center"><h2 class="sec flat">${title} <small class="muted">${arr.length}</small></h2>${extra}</div>
+      <ul class="list">${arr.map(row).join('') || '<li class="li muted">Nothing here.</li>'}</ul>`;
+    return `
+      <h2 class="sec first">Trade tracker</h2>
+      <div class="stats">
+        ${statTile('Income if listed items sell', `${fmt(t.potIncome)} ${coin}`)}
+        ${statTile('Profit if listed items sell', `${t.potProfit >= 0 ? '+' : ''}${fmt(t.potProfit)} ${coin}`, t.potProfit >= 0 ? 'good' : 'bad')}
+        ${statTile('Income from sold items', `${fmt(t.soldIncome)} ${coin}`)}
+        ${statTile('Profit from sold items', `${t.soldProfit >= 0 ? '+' : ''}${fmt(t.soldProfit)} ${coin}`, t.soldProfit >= 0 ? 'good' : 'bad')}
+      </div>
+      <p class="hint">All income and profit figures are after the 5% EA transfer tax.</p>
+      <form class="panel addtrade" data-form="addTrade">
+        <label>Card<input name="name" required placeholder="e.g. 86 CB fodder"></label>
+        <label>Bought for<input name="buy" type="number" inputmode="numeric" min="0" required></label>
+        <label>List at (BIN)<input name="list" type="number" inputmode="numeric" min="150" required></label>
+        <button class="btn primary">Add</button>
+      </form>
+      ${sec('On the market', groups.listed)}
+      ${sec('Expired / unsold', groups.unsold, groups.unsold.length ? `<span class="row gap center">${select('relistAdj', [['0', 'same price'], ['-5', '−5%'], ['-10', '−10%'], ['5', '+5%'], ['10', '+10%']], ui.relistAdj || '0', 'aria-label="Price change"')}<button class="btn small" data-a="relistAll">Relist all</button></span>` : '')}
+      <p class="hint">Relisting never goes below a card's break-even price unless you set it yourself.</p>
+      ${sec('Sold', groups.sold, groups.sold.length ? '<button class="btn small" data-a="clearSold">Clear</button>' : '')}`;
+  },
+};
+
+function renderResult() {
+  const r = ui.result;
+  if (!r) return '';
+  if (r.error) return `<div class="callout bad">${h(r.error)}</div>`;
+  if (!r.squad) return `<div class="callout bad">${h(r.reason)}</div>`;
+  const f = formation(ui.sbc.formation);
+  const ev = r.eval;
+  const fromClub = r.squad.filter(p => p.source === 'club');
+  const buys = r.squad.filter(p => p.source === 'market');
+  const clubValue = fromClub.filter(p => !p.untradeable).reduce((a, p) => a + E.afterTax(p.price || S.prices[p.rating] || 0), 0);
+  return `
+    <div class="callout ${r.ok ? 'good' : 'bad'}">${r.ok ? '✔ All requirements met. Build this squad in-game and submit.' : h(r.reason)}</div>
+    <div class="stats">
+      ${statTile('Team rating', ev.rating)}
+      ${statTile('Chemistry', `${ev.chem.total}/33`)}
+      ${statTile('Coins to spend', `${fmt(r.buyCost)} ${coin}`, r.buyCost ? 'warn' : 'good')}
+      ${statTile('Tradeable club value used', `${fmt(clubValue)} ${coin}`)}
+    </div>
+    ${pitch(r.squad, f, ev.chem.per, false)}
+    <h3>Requirement check</h3>
+    <ul class="checks">${ev.results.map(x => `<li class="${x.ok ? 'ok' : 'no'}"><span>${x.ok ? '✔' : '✖'}</span>${h(x.label)}<em>${h(x.actual)}</em></li>`).join('')}</ul>
+    ${buys.length ? `<h3>Buy from the market</h3><ul class="list">${buys.map(p => `<li class="li"><span class="badge ${qClass(p.rating)}">${p.rating}</span><div class="grow">Any ${p.rating}-rated card</div><span class="num">~${fmt(p.price)} ${coin}</span></li>`).join('')}</ul>` : ''}
+    <h3>From your club</h3>
+    <ul class="list">${fromClub.map(p => `<li class="li"><span class="badge ${qClass(p.rating)} ${p.rare ? 'rare' : ''}">${p.rating}</span>
+      <div class="grow"><b>${h(p.name)}</b><small>${h(p.nation)} · ${h(p.league)} · ${h(p.club)}</small></div>
+      ${p.untradeable ? '<i class="tag ut">UT</i>' : ''}${p.duplicate ? '<i class="tag dup">DUP</i>' : ''}</li>`).join('')}</ul>
+    <div class="row gap wrap">
+      <button class="btn" data-a="solveAgain">Try another solution</button>
+      <button class="btn" data-a="copyList">Copy list</button>
+      ${r.ok ? '<button class="btn primary" data-a="submitted">I submitted it</button>' : ''}
+    </div>
+    <p class="hint">“I submitted it” removes the club cards used so your next solve stays accurate. You can undo.</p>`;
+}
+
+// ---------------------------------------------------------------- render
+function render() {
+  $('#main').innerHTML = VIEWS[ui.tab]();
+  document.querySelectorAll('.nav button').forEach(b => {
+    const on = b.dataset.tab === ui.tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-current', on ? 'page' : 'false');
+  });
+}
+
+// ---------------------------------------------------------------- solving
+let worker = null;
+function getWorker() {
+  if (worker) return worker;
+  try {
+    const src = globalThis.__SOLVER_SRC;
+    worker = src
+      ? new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })))
+      : new Worker(new URL('./solver-worker.js', import.meta.url), { type: 'module' });
+  } catch { worker = null; }
+  return worker;
+}
+
+function runSolve(newSeed = false) {
+  if (!ui.sbc.reqs.length) return toast('Add at least one requirement', 'bad');
+  if (newSeed) ui.seed++;
+  ui.solving = true; render();
+  const payload = {
+    club: S.club, formation: formation(ui.sbc.formation), reqs: ui.sbc.reqs,
+    priceTable: S.prices, useMarket: S.settings.useMarket,
+    timeMs: S.settings.thorough ? 4000 : 1500, seed: ui.seed * 7919,
+  };
+  const done = res => {
+    ui.solving = false;
+    ui.result = res;
+    render();
+    $('#result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const w = getWorker();
+  if (w) {
+    w.onmessage = e => done(e.data.ok ? e.data.result : { error: e.data.error });
+    w.onerror = () => { worker = null; setTimeout(() => done(E.solve(payload)), 0); };
+    w.postMessage(payload);
+  } else setTimeout(() => done(E.solve(payload)), 30);
+}
+
+// ---------------------------------------------------------------- actions
+const A = {
+  go: el => { ui.tab = el.dataset.tab; render(); scrollTo(0, 0); },
+  loadSample() {
+    const go = () => { S.club = sampleClub(); persist(); closeModal(); render(); toast('Sample club loaded (fictional players)'); };
+    if (S.club.length) askConfirm('Replace your club with the fictional sample club?', 'Replace club', go); else go();
+  },
+  clearClub() {
+    askConfirm('Delete every player in your club? Export first if you want a backup.', 'Delete all players', () => {
+      S.club = []; persist(); closeModal(); render(); toast('Club cleared');
+    });
+  },
+  exportCsv: () => showText('Export club (CSV)', 'club.csv', Store.toCsv(S.club), 'text/csv'),
+  dlgYes() { const f = pending.yes; pending.yes = null; f?.(); },
+  async dlgCopy() {
+    const ta = $('#dlg-text');
+    try { await navigator.clipboard.writeText(ta.value); toast('Copied'); }
+    catch { ta.focus(); ta.select(); toast('Text selected — copy it from the menu'); }
+  },
+  dlgDownload() { const f = pending.file; if (f) Store.download(f.filename, f.text, f.type); },
+  importOpen() {
+    openModal(`<h2>Import club</h2>
+      <p class="hint">CSV columns: <code>${Store.CSV_HEADER}</code>. Positions are separated by <code>|</code>, e.g. <code>CM|CDM</code>. Only name and rating are required.</p>
+      <label>Choose a file<input type="file" accept=".csv,text/csv,text/plain" id="imp-file"></label>
+      <label>…or paste CSV<textarea id="imp-text" rows="6" placeholder="${h(Store.CSV_HEADER)}"></textarea></label>
+      <label class="switch"><input type="checkbox" id="imp-replace"><span></span>Replace my current club</label>
+      <div id="imp-err"></div>
+      <div class="row gap"><button class="btn primary" data-a="importRun">Import</button><button class="btn" data-a="close">Cancel</button></div>`);
+  },
+  async importRun() {
+    const file = $('#imp-file').files[0];
+    const text = file ? await file.text() : $('#imp-text').value;
+    const { players, errors } = Store.parseCsv(text);
+    if (!players.length) {
+      $('#imp-err').innerHTML = `<div class="callout bad">No players imported.<br>${errors.slice(0, 5).map(h).join('<br>')}</div>`;
+      return;
+    }
+    S.club = $('#imp-replace').checked ? players : [...S.club, ...players];
+    persist(); closeModal(); render();
+    toast(`Imported ${players.length} players${errors.length ? ` · ${errors.length} rows skipped` : ''}`);
+  },
+  protect(el) {
+    const p = S.club.find(x => x.id === el.dataset.id);
+    if (!p) return;
+    p.protected = !p.protected; persist(); render();
+    toast(p.protected ? `${p.name} will never be used in SBCs` : `${p.name} can be used in SBCs`);
+  },
+  editP(el) {
+    const p = S.club.find(x => x.id === el.dataset.id) || { id: '', name: '', rating: 80, positions: [], nation: '', league: '', club: '', rarity: 'common', untradeable: false, count: 1, price: 0, protected: false };
+    const dl = (id, attr) => `<datalist id="${id}">${uniqueValues(attr).map(v => `<option value="${h(v)}">`).join('')}</datalist>`;
+    openModal(`<h2>${p.id ? 'Edit player' : 'Add player'}</h2>
+      <form data-form="saveP" data-id="${h(p.id)}" class="grid2">
+        <label class="span2">Name<input name="name" required value="${h(p.name)}"></label>
+        <label>Rating<input name="rating" type="number" min="1" max="99" required value="${p.rating}"></label>
+        <label>Positions<input name="positions" placeholder="CM|CDM" value="${h((p.positions || []).join('|'))}"></label>
+        <label>Nation<input name="nation" list="dl-n" value="${h(p.nation)}">${dl('dl-n', 'nation')}</label>
+        <label>League<input name="league" list="dl-l" value="${h(p.league)}">${dl('dl-l', 'league')}</label>
+        <label>Club<input name="club" list="dl-c" value="${h(p.club)}">${dl('dl-c', 'club')}</label>
+        <label>Rarity<select name="rarity">${['common', 'rare', 'icon', 'hero'].map(r => `<option ${p.rarity === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+        <label>Copies<input name="count" type="number" min="1" value="${p.count || 1}"></label>
+        <label>Price (optional)<input name="price" type="number" min="0" value="${p.price || ''}" placeholder="uses fodder table"></label>
+        <label class="switch span2"><input type="checkbox" name="untradeable" ${p.untradeable ? 'checked' : ''}><span></span>Untradeable</label>
+        <label class="switch span2"><input type="checkbox" name="protected" ${p.protected ? 'checked' : ''}><span></span>Protect — never use in SBCs</label>
+        <div class="row gap span2"><button class="btn primary">Save</button>
+        ${p.id ? `<button type="button" class="btn danger" data-a="delP" data-id="${p.id}">Delete</button>` : ''}
+        <button type="button" class="btn" data-a="close">Cancel</button></div>
+      </form>`);
+  },
+  delP(el) {
+    S.club = S.club.filter(p => p.id !== el.dataset.id); persist(); closeModal(); render();
+  },
+  close: closeModal,
+
+  // SBC
+  tpl(el) {
+    const t = [...TEMPLATES, ...(S.savedSbcs || [])].find(x => x.id === el.dataset.id);
+    if (!t) return;
+    ui.sbc = { name: t.name, formation: t.formation, reqs: clone(t.reqs), from: t.id };
+    ui.result = null; render();
+  },
+  delSbc(el) {
+    S.savedSbcs = S.savedSbcs.filter(x => x.id !== el.dataset.id); persist(); render();
+  },
+  rmReq(el) { ui.sbc.reqs.splice(+el.dataset.i, 1); ui.sbc.from = null; render(); },
+  addReq() {
+    const n = ui.newReq;
+    const num = v => (v === '' || v == null ? null : Number(v));
+    let r;
+    if (['rating', 'chem', 'playerChem'].includes(n.t)) r = { t: n.t, n: num(n.n) ?? 0 };
+    else if (n.t === 'count') {
+      if (n.attr !== 'rare' && !String(n.value).trim()) return toast('Enter a value, e.g. a league name', 'bad');
+      r = { t: 'count', attr: n.attr, value: n.attr === 'rare' ? true : String(n.value).trim(), op: n.op, n: num(n.n) ?? 1 };
+    } else if (n.t === 'same' || n.t === 'distinct') r = { t: n.t, attr: n.attr === 'rarity' || n.attr === 'quality' || n.attr === 'rare' ? 'league' : n.attr, op: n.op, n: num(n.n) ?? 1 };
+    else if (n.t === 'ovr') {
+      r = { t: 'ovr', min: num(n.min), max: num(n.max) };
+      if (r.min == null && r.max == null) return toast('Set a min or max rating', 'bad');
+      ui.sbc.reqs = ui.sbc.reqs.filter(x => x.t !== 'ovr');
+    }
+    if (['rating', 'chem', 'playerChem'].includes(r.t)) ui.sbc.reqs = ui.sbc.reqs.filter(x => x.t !== r.t);
+    ui.sbc.reqs.push(r); ui.sbc.from = null; render();
+  },
+  saveSbc() {
+    const s = ui.sbc;
+    if (!s.reqs.length) return toast('Add requirements first', 'bad');
+    const existing = (S.savedSbcs || []).find(x => x.name === s.name && x.id.startsWith('u-'));
+    if (existing) Object.assign(existing, { formation: s.formation, reqs: clone(s.reqs) });
+    else S.savedSbcs = [...(S.savedSbcs || []), { id: `u-${uid()}`, name: s.name || 'My SBC', formation: s.formation, reqs: clone(s.reqs) }];
+    persist(); render(); toast('Saved to your challenges');
+  },
+  solve: () => runSolve(false),
+  solveAgain: () => runSolve(true),
+  async copyList() {
+    const r = ui.result; if (!r?.squad) return;
+    const f = formation(ui.sbc.formation);
+    const text = `${ui.sbc.name} (${f.name}) — rating ${r.eval.rating}, chem ${r.eval.chem.total}\n` +
+      r.squad.map((p, i) => `${f.slots[i].pos}: ${p.generic ? `BUY any ${p.rating} (~${fmt(p.price)})` : `${p.name} ${p.rating}`}`).join('\n');
+    try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { showText('Squad list', 'squad.txt', text, 'text/plain'); }
+  },
+  submitted() {
+    const r = ui.result; if (!r?.ok) return;
+    ui.undo = { club: clone(S.club), history: clone(S.history) };
+    for (const p of r.squad) {
+      if (p.source !== 'club') continue;
+      const c = S.club.find(x => x.id === p.id);
+      if (!c) continue;
+      c.count = (c.count || 1) - 1;
+    }
+    S.club = S.club.filter(p => (p.count || 1) > 0 && p.count !== 0);
+    S.history = [{ name: ui.sbc.name, at: Date.now(), rating: r.eval.rating, chem: r.eval.chem.total, buy: r.buyCost }, ...S.history].slice(0, 50);
+    ui.result = null; persist(); render();
+    showUndo();
+  },
+  undo() {
+    if (!ui.undo) return;
+    S.club = ui.undo.club; S.history = ui.undo.history; ui.undo = null;
+    persist(); render(); toast('Restored your club');
+  },
+
+  // Squad
+  pickSlot(el) { ui.pickSlot = +el.dataset.i; ui.pickQ = ''; openPicker(); },
+  assign(el) {
+    const i = ui.pickSlot;
+    S.squad.ids = S.squad.ids.map(id => (id === el.dataset.id ? null : id));
+    S.squad.ids[i] = el.dataset.id || null;
+    persist(); closeModal(); render();
+  },
+  clearSquad() { S.squad.ids = Array(11).fill(null); persist(); render(); },
+  squadToSbc() { ui.sbc.formation = S.squad.formation; ui.tab = 'sbc'; render(); toast(`SBC formation set to ${S.squad.formation}`); },
+
+  // Trades
+  tSold(el) {
+    const x = S.trades.find(t => t.id === el.dataset.id);
+    askNumber(`${x.name} sold for (before tax)`, x.list, 'Mark sold', v => {
+      const n = parseInt(v, 10);
+      if (!(n > 0)) return toast('Enter a valid price', 'bad');
+      x.status = 'sold'; x.soldFor = n; persist(); closeModal(); render();
+    });
+  },
+  tUnsold(el) { const x = S.trades.find(t => t.id === el.dataset.id); x.status = 'unsold'; persist(); render(); },
+  tRelist(el) {
+    const x = S.trades.find(t => t.id === el.dataset.id);
+    askNumber(`Relist ${x.name} at (BIN)`, x.list, 'Relist', v => {
+      x.list = E.roundToMarket(parseInt(v, 10) || x.list); x.status = 'listed'; persist(); closeModal(); render();
+    });
+  },
+  tDel(el) { S.trades = S.trades.filter(t => t.id !== el.dataset.id); persist(); render(); },
+  relistAll() {
+    const adj = +(ui.relistAdj || 0) / 100;
+    let floored = 0;
+    for (const x of S.trades) {
+      if (x.status !== 'unsold') continue;
+      const breakeven = E.roundToMarket(Math.ceil(x.buy / (1 - E.EA_TAX)), 'up');
+      let p = E.roundToMarket(x.list * (1 + adj));
+      if (adj < 0 && p < breakeven && x.list >= breakeven) { p = breakeven; floored++; }
+      x.list = p; x.status = 'listed';
+    }
+    persist(); render();
+    toast(floored ? `Relisted · ${floored} kept at break-even to avoid a loss` : 'Relisted');
+  },
+  clearSold() { S.trades = S.trades.filter(t => t.status !== 'sold'); persist(); render(); },
+
+  // Settings
+  settings() {
+    openModal(`<h2>Settings</h2>
+      <h3>Fodder prices</h3>
+      <p class="hint">The solver uses these when it suggests buying “any card” of a rating, and to value tradeable club cards without a price. Update them to today's market.</p>
+      <div class="prices">${Object.keys(S.prices).sort((a, b) => a - b).map(r => `<label><span class="badge ${qClass(+r)}">${r}</span><input type="number" min="0" data-price="${r}" value="${S.prices[r]}"></label>`).join('')}</div>
+      <div class="row gap"><button class="btn small" data-a="savePrices">Save prices</button><button class="btn small" data-a="resetPrices">Reset to defaults</button></div>
+      <h3>Backup</h3>
+      <p class="hint">Everything lives only on this device. Export a backup to move to another phone.</p>
+      <div class="row gap wrap"><button class="btn small" data-a="backup">Export backup</button>
+      <label class="btn small">Restore from file<input type="file" accept=".json,application/json" id="restore" hidden></label>
+      <button class="btn small" data-a="restorePaste">Restore from text</button>
+      <button class="btn small danger" data-a="resetAll">Erase all data</button></div>
+      <h3>About</h3>
+      <p class="hint">SquadSage is an independent fan tool. It is not affiliated with or endorsed by EA. It never logs in to or automates your game account.</p>
+      <div class="row"><button class="btn" data-a="close">Done</button></div>`);
+  },
+  restorePaste() {
+    openModal(`<h2>Restore backup</h2><p class="hint">Paste the backup text you copied earlier. This replaces everything on this device.</p>
+      <textarea id="restore-text" rows="8"></textarea>
+      <div class="row gap"><button class="btn primary" data-a="restoreRun">Restore</button><button class="btn" data-a="close">Cancel</button></div>`);
+  },
+  restoreRun() { restoreFrom($('#restore-text').value); },
+  savePrices() {
+    document.querySelectorAll('[data-price]').forEach(i => { S.prices[i.dataset.price] = Math.max(0, parseInt(i.value, 10) || 0); });
+    persist(); toast('Prices saved');
+  },
+  resetPrices() { S.prices = { ...DEFAULT_PRICES }; persist(); A.settings(); },
+  backup: () => showText('Backup', `squadsage-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S), 'application/json'),
+  resetAll() {
+    askConfirm('Erase your club, trades, saved SBCs and settings from this device?', 'Erase everything', () => {
+      S = Store.defaultState(); persist(); closeModal(); ui.result = null; render(); toast('All data erased');
+    });
+  },
+};
+
+function showUndo() {
+  const t = $('#toast');
+  t.className = 'toast show';
+  t.innerHTML = 'Club updated — used cards removed. <button class="link" data-a="undo">Undo</button>';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = 'toast'), 8000);
+}
+
+function openPicker() {
+  const f = formation(S.squad.formation);
+  const pos = f.slots[ui.pickSlot].pos;
+  const q = ui.pickQ.toLowerCase();
+  const list = S.club
+    .filter(p => !q || `${p.name} ${p.nation} ${p.league} ${p.club}`.toLowerCase().includes(q))
+    .sort((a, b) => (E.inPosition(b, pos) - E.inPosition(a, pos)) || b.rating - a.rating)
+    .slice(0, 120);
+  const html = `<h2>Choose ${h(pos)}</h2>
+    <input type="search" id="pick-q" placeholder="Search" value="${h(ui.pickQ)}" aria-label="Search players">
+    <ul class="list picker">
+      ${S.squad.ids[ui.pickSlot] ? '<li><button class="li-main" data-a="assign" data-id=""><b>Remove player</b></button></li>' : ''}
+      ${list.map(p => `<li class="li"><span class="badge ${qClass(p.rating)} ${p.rare ? 'rare' : ''}">${p.rating}</span>
+        <button class="li-main" data-a="assign" data-id="${p.id}"><b>${h(p.name)}</b>
+        <small>${h((p.positions || []).join('/'))} · ${h(p.nation)} · ${h(p.league)} · ${h(p.club)}</small></button>
+        ${E.inPosition(p, pos) ? '' : '<i class="tag dup">OOP</i>'}</li>`).join('') || '<li class="li muted">No players. Import your club first.</li>'}
+    </ul>
+    <button class="btn" data-a="close">Cancel</button>`;
+  openModal(html);
+  const inp = $('#pick-q');
+  inp.oninput = () => { ui.pickQ = inp.value; const pos2 = inp.selectionStart; openPicker(); const i2 = $('#pick-q'); i2.focus(); i2.setSelectionRange(pos2, pos2); };
+}
+
+// ---------------------------------------------------------------- events
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]');
+  if (!el) {
+    const nav = e.target.closest('.nav button');
+    if (nav) { ui.tab = nav.dataset.tab; render(); scrollTo(0, 0); }
+    return;
+  }
+  const fn = A[el.dataset.a];
+  if (fn) { e.preventDefault(); fn(el, e); }
+});
+
+document.addEventListener('submit', e => {
+  const form = e.target.closest('[data-form]');
+  if (!form) return;
+  e.preventDefault();
+  const fd = new FormData(form);
+  if (form.dataset.form === 'dlgNum') { const f = pending.num; pending.num = null; f?.(fd.get('v')); return; }
+  if (form.dataset.form === 'addTrade') {
+    const buy = parseInt(fd.get('buy'), 10), list = parseInt(fd.get('list'), 10);
+    if (!(buy >= 0) || !(list >= 150)) return toast('Enter valid prices', 'bad');
+    S.trades.unshift({ id: uid(), name: String(fd.get('name')).trim(), buy, list: E.roundToMarket(list), status: 'listed', at: Date.now() });
+    persist(); render();
+    if (E.afterTax(list) < buy) toast('Heads up: this listing loses coins after the 5% tax', 'bad');
+  }
+  if (form.dataset.form === 'saveP') {
+    const id = form.dataset.id;
+    const rarity = fd.get('rarity');
+    const data = {
+      name: String(fd.get('name')).trim(),
+      rating: Math.min(99, Math.max(1, parseInt(fd.get('rating'), 10) || 1)),
+      positions: String(fd.get('positions') || '').split(/[|/ ,;]+/).map(s => s.toUpperCase()).filter(Boolean),
+      nation: String(fd.get('nation')).trim(), league: String(fd.get('league')).trim(), club: String(fd.get('club')).trim(),
+      rarity, rare: rarity !== 'common',
+      count: Math.max(1, parseInt(fd.get('count'), 10) || 1),
+      price: Math.max(0, parseInt(fd.get('price'), 10) || 0),
+      untradeable: fd.get('untradeable') === 'on', protected: fd.get('protected') === 'on',
+    };
+    if (id) Object.assign(S.club.find(p => p.id === id), data);
+    else S.club.unshift({ id: `p${uid()}`, ...data });
+    persist(); closeModal(); render(); toast('Saved');
+  }
+});
+
+function restoreFrom(t) {
+  try {
+    const data = JSON.parse(t);
+    if (!Array.isArray(data.club)) throw new Error('bad');
+    S = { ...Store.defaultState(), ...data }; persist(); closeModal(); render(); toast('Backup restored');
+  } catch { toast('That is not a SquadSage backup', 'bad'); }
+}
+
+function onInput(e) {
+  const el = e.target;
+  if (el.id === 'restore' && el.files?.[0]) {
+    el.files[0].text().then(restoreFrom);
+    return;
+  }
+  const k = el.dataset.in;
+  if (!k) return;
+  const v = el.type === 'checkbox' ? el.checked : el.value;
+  const rerender = e.type === 'change';
+  if (k.startsWith('nr.')) { ui.newReq[k.slice(3)] = v; if (rerender && el.tagName === 'SELECT') render(); return; }
+  if (k === 'sbc.name') { ui.sbc.name = v; return; }
+  if (k === 'sbc.formation') { ui.sbc.formation = v; ui.result = null; render(); return; }
+  if (k.startsWith('set.')) { S.settings[k.slice(4)] = v; persist(); return; }
+  if (k === 'sq.formation') { S.squad.formation = v; persist(); render(); return; }
+  if (k === 'clubQ') {
+    ui.clubQ = v;
+    const pos = el.selectionStart; render();
+    const i = document.querySelector('[data-in="clubQ"]'); i.focus(); i.setSelectionRange(pos, pos);
+    return;
+  }
+  if (k === 'clubFilter' || k === 'clubSort') { ui[k] = v; render(); return; }
+  if (k === 'relistAdj') { ui.relistAdj = v; }
+}
+document.addEventListener('input', e => { if (e.target.dataset.in === 'clubQ') onInput(e); else if (e.target.dataset.in?.startsWith('nr.') && e.target.tagName !== 'SELECT') onInput(e); else if (e.target.dataset.in === 'sbc.name') onInput(e); });
+document.addEventListener('change', e => { if (e.target.dataset.in !== 'clubQ') onInput(e); });
+
+$('#modal').addEventListener('close', () => { ui.pickSlot = null; });
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+
+// Offline support
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !globalThis.__SOLVER_SRC) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+window.addEventListener('online', () => $('#net').textContent = 'Online');
+window.addEventListener('offline', () => $('#net').textContent = 'Offline — still works');
+
+render();
+
+return {  };
+})();
+
+</script>

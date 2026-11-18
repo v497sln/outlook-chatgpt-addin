@@ -41,6 +41,27 @@ function openModal(html) {
   $('#modal-body').innerHTML = html;
   if (!m.open) m.showModal();
 }
+// In-app replacements for confirm()/prompt(), which embedded web views often block.
+const pending = {};
+function askConfirm(msg, yesLabel, onYes, danger = true) {
+  pending.yes = onYes;
+  openModal(`<h2>Are you sure?</h2><p>${h(msg)}</p>
+    <div class="row gap"><button class="btn ${danger ? 'danger' : 'primary'}" data-a="dlgYes">${h(yesLabel)}</button><button class="btn" data-a="close">Cancel</button></div>`);
+}
+function askNumber(title, value, okLabel, onOk) {
+  pending.num = onOk;
+  openModal(`<h2>${h(title)}</h2><form data-form="dlgNum"><label>Coins<input id="dlg-num" name="v" type="number" inputmode="numeric" min="0" value="${h(value)}" required></label>
+    <div class="row gap"><button class="btn primary">${h(okLabel)}</button><button type="button" class="btn" data-a="close">Cancel</button></div></form>`);
+  setTimeout(() => $('#dlg-num')?.select(), 30);
+}
+function showText(title, filename, text, type) {
+  pending.file = { filename, text, type };
+  openModal(`<h2>${h(title)}</h2>
+    <p class="hint">Copy this text and keep it somewhere safe, for example in a note.</p>
+    <textarea id="dlg-text" rows="10" readonly>${h(text)}</textarea>
+    <div class="row gap wrap"><button class="btn primary" data-a="dlgCopy">Copy</button>${globalThis.__SOLVER_SRC ? '' : '<button class="btn" data-a="dlgDownload">Download file</button>'}<button class="btn" data-a="close">Close</button></div>`);
+}
+
 function closeModal() { const m = $('#modal'); if (m.open) m.close(); ui.pickSlot = null; }
 
 const coin = '<span class="coin" aria-hidden="true"></span>';
@@ -377,7 +398,12 @@ function render() {
 let worker = null;
 function getWorker() {
   if (worker) return worker;
-  try { worker = new Worker(new URL('./solver-worker.js', import.meta.url), { type: 'module' }); } catch { worker = null; }
+  try {
+    const src = globalThis.__SOLVER_SRC;
+    worker = src
+      ? new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })))
+      : new Worker(new URL('./solver-worker.js', import.meta.url), { type: 'module' });
+  } catch { worker = null; }
   return worker;
 }
 
@@ -408,14 +434,22 @@ function runSolve(newSeed = false) {
 const A = {
   go: el => { ui.tab = el.dataset.tab; render(); scrollTo(0, 0); },
   loadSample() {
-    if (S.club.length && !confirm('Replace your club with the fictional sample club?')) return;
-    S.club = sampleClub(); persist(); render(); toast('Sample club loaded (fictional players)');
+    const go = () => { S.club = sampleClub(); persist(); closeModal(); render(); toast('Sample club loaded (fictional players)'); };
+    if (S.club.length) askConfirm('Replace your club with the fictional sample club?', 'Replace club', go); else go();
   },
   clearClub() {
-    if (!confirm('Delete every player in your club? Export first if you want a backup.')) return;
-    S.club = []; persist(); render();
+    askConfirm('Delete every player in your club? Export first if you want a backup.', 'Delete all players', () => {
+      S.club = []; persist(); closeModal(); render(); toast('Club cleared');
+    });
   },
-  exportCsv: () => Store.download('club.csv', Store.toCsv(S.club), 'text/csv'),
+  exportCsv: () => showText('Export club (CSV)', 'club.csv', Store.toCsv(S.club), 'text/csv'),
+  dlgYes() { const f = pending.yes; pending.yes = null; f?.(); },
+  async dlgCopy() {
+    const ta = $('#dlg-text');
+    try { await navigator.clipboard.writeText(ta.value); toast('Copied'); }
+    catch { ta.focus(); ta.select(); toast('Text selected — copy it from the menu'); }
+  },
+  dlgDownload() { const f = pending.file; if (f) Store.download(f.filename, f.text, f.type); },
   importOpen() {
     openModal(`<h2>Import club</h2>
       <p class="hint">CSV columns: <code>${Store.CSV_HEADER}</code>. Positions are separated by <code>|</code>, e.g. <code>CM|CDM</code>. Only name and rating are required.</p>
@@ -512,7 +546,7 @@ const A = {
     const f = formation(ui.sbc.formation);
     const text = `${ui.sbc.name} (${f.name}) — rating ${r.eval.rating}, chem ${r.eval.chem.total}\n` +
       r.squad.map((p, i) => `${f.slots[i].pos}: ${p.generic ? `BUY any ${p.rating} (~${fmt(p.price)})` : `${p.name} ${p.rating}`}`).join('\n');
-    try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { prompt('Copy this list:', text); }
+    try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { showText('Squad list', 'squad.txt', text, 'text/plain'); }
   },
   submitted() {
     const r = ui.result; if (!r?.ok) return;
@@ -548,19 +582,18 @@ const A = {
   // Trades
   tSold(el) {
     const x = S.trades.find(t => t.id === el.dataset.id);
-    const v = prompt('Sold for (coins, before tax):', x.list);
-    if (v == null) return;
-    const n = parseInt(v, 10);
-    if (!(n > 0)) return toast('Enter a valid price', 'bad');
-    x.status = 'sold'; x.soldFor = n; persist(); render();
+    askNumber(`${x.name} sold for (before tax)`, x.list, 'Mark sold', v => {
+      const n = parseInt(v, 10);
+      if (!(n > 0)) return toast('Enter a valid price', 'bad');
+      x.status = 'sold'; x.soldFor = n; persist(); closeModal(); render();
+    });
   },
   tUnsold(el) { const x = S.trades.find(t => t.id === el.dataset.id); x.status = 'unsold'; persist(); render(); },
   tRelist(el) {
     const x = S.trades.find(t => t.id === el.dataset.id);
-    const v = prompt('Relist at (BIN):', x.list);
-    if (v == null) return;
-    const n = E.roundToMarket(parseInt(v, 10) || x.list);
-    x.list = n; x.status = 'listed'; persist(); render();
+    askNumber(`Relist ${x.name} at (BIN)`, x.list, 'Relist', v => {
+      x.list = E.roundToMarket(parseInt(v, 10) || x.list); x.status = 'listed'; persist(); closeModal(); render();
+    });
   },
   tDel(el) { S.trades = S.trades.filter(t => t.id !== el.dataset.id); persist(); render(); },
   relistAll() {
@@ -588,21 +621,29 @@ const A = {
       <h3>Backup</h3>
       <p class="hint">Everything lives only on this device. Export a backup to move to another phone.</p>
       <div class="row gap wrap"><button class="btn small" data-a="backup">Export backup</button>
-      <label class="btn small">Restore backup<input type="file" accept=".json,application/json" id="restore" hidden></label>
+      <label class="btn small">Restore from file<input type="file" accept=".json,application/json" id="restore" hidden></label>
+      <button class="btn small" data-a="restorePaste">Restore from text</button>
       <button class="btn small danger" data-a="resetAll">Erase all data</button></div>
       <h3>About</h3>
       <p class="hint">SquadSage is an independent fan tool. It is not affiliated with or endorsed by EA. It never logs in to or automates your game account.</p>
       <div class="row"><button class="btn" data-a="close">Done</button></div>`);
   },
+  restorePaste() {
+    openModal(`<h2>Restore backup</h2><p class="hint">Paste the backup text you copied earlier. This replaces everything on this device.</p>
+      <textarea id="restore-text" rows="8"></textarea>
+      <div class="row gap"><button class="btn primary" data-a="restoreRun">Restore</button><button class="btn" data-a="close">Cancel</button></div>`);
+  },
+  restoreRun() { restoreFrom($('#restore-text').value); },
   savePrices() {
     document.querySelectorAll('[data-price]').forEach(i => { S.prices[i.dataset.price] = Math.max(0, parseInt(i.value, 10) || 0); });
     persist(); toast('Prices saved');
   },
   resetPrices() { S.prices = { ...DEFAULT_PRICES }; persist(); A.settings(); },
-  backup: () => Store.download(`squadsage-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S, null, 1), 'application/json'),
+  backup: () => showText('Backup', `squadsage-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S), 'application/json'),
   resetAll() {
-    if (!confirm('Erase your club, trades, saved SBCs and settings from this device?')) return;
-    S = Store.defaultState(); persist(); closeModal(); ui.result = null; render();
+    askConfirm('Erase your club, trades, saved SBCs and settings from this device?', 'Erase everything', () => {
+      S = Store.defaultState(); persist(); closeModal(); ui.result = null; render(); toast('All data erased');
+    });
   },
 };
 
@@ -654,6 +695,7 @@ document.addEventListener('submit', e => {
   if (!form) return;
   e.preventDefault();
   const fd = new FormData(form);
+  if (form.dataset.form === 'dlgNum') { const f = pending.num; pending.num = null; f?.(fd.get('v')); return; }
   if (form.dataset.form === 'addTrade') {
     const buy = parseInt(fd.get('buy'), 10), list = parseInt(fd.get('list'), 10);
     if (!(buy >= 0) || !(list >= 150)) return toast('Enter valid prices', 'bad');
@@ -680,16 +722,18 @@ document.addEventListener('submit', e => {
   }
 });
 
+function restoreFrom(t) {
+  try {
+    const data = JSON.parse(t);
+    if (!Array.isArray(data.club)) throw new Error('bad');
+    S = { ...Store.defaultState(), ...data }; persist(); closeModal(); render(); toast('Backup restored');
+  } catch { toast('That is not a SquadSage backup', 'bad'); }
+}
+
 function onInput(e) {
   const el = e.target;
   if (el.id === 'restore' && el.files?.[0]) {
-    el.files[0].text().then(t => {
-      try {
-        const data = JSON.parse(t);
-        if (!Array.isArray(data.club)) throw new Error('bad');
-        S = { ...Store.defaultState(), ...data }; persist(); closeModal(); render(); toast('Backup restored');
-      } catch { toast('That file is not a SquadSage backup', 'bad'); }
-    });
+    el.files[0].text().then(restoreFrom);
     return;
   }
   const k = el.dataset.in;
@@ -717,7 +761,7 @@ $('#modal').addEventListener('close', () => { ui.pickSlot = null; });
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 // Offline support
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !globalThis.__SOLVER_SRC) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 window.addEventListener('online', () => $('#net').textContent = 'Online');
