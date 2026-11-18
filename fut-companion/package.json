@@ -1,0 +1,11 @@
+{
+  "name": "squadsage",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline FUT companion: SBC solver, squad builder and trade tracker. No account login.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "python3 -m http.server 8080"
+  }
+}
