@@ -17,7 +17,7 @@
 
   // ------------------------------------------------------------ storage
   const S = (() => {
-    const base = { locked: {}, subs: [], searches: [], prices: {}, limits: { hour: 90, day: 300, search: 150 }, club: null, clubAt: 0, onlyUT: false, undercut: true, floorBE: true, log: [] };
+    const base = { bgPrices: true, bgPerHour: 40, locked: {}, subs: [], searches: [], prices: {}, limits: { hour: 90, day: 300, search: 150 }, club: null, clubAt: 0, onlyUT: false, undercut: true, floorBE: true, log: [] };
     try { return Object.assign(base, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { return base; }
   })();
   S.limits.search = S.limits.search || 150; S.prices = S.prices || {}; S.searches = S.searches || [];
@@ -41,16 +41,26 @@
   });
   const body = r => (r && (r.response || r.data)) || {};
   const loc = (keys, fb) => {
-    try { for (const k of keys) { const t = services.Localization.localize(k); if (t && t !== k) return t; } } catch { /* ignore */ }
+    try { for (const k of keys) { const t = services.Localization.localize(k); if (t && t !== k && !/^\*/.test(t) && !/global\.|search\./.test(t)) return t; } } catch { /* ignore */ }
     return fb;
   };
-  const nation = id => loc([`search.nationName.nation${id}`], `Nation #${id}`);
-  const league = id => loc([`global.leagueFull.${id}`, `global.leagueFull.2027.league${id}`, `global.leagueFull.2026.league${id}`], `League #${id}`);
-  const club = id => loc([`global.teamFull.${id}`, `global.teamFull.2027.team${id}`, `global.teamFull.2026.team${id}`], `Club #${id}`);
+  const nation = id => loc([`search.nationName.nation${id}`, `global.nationName.nation${id}`], `Nation #${id}`);
+  const league = id => loc([`global.leagueFull.2027.league${id}`, `global.leagueFull.2026.league${id}`, `global.leagueFull.${id}`, `global.leagueabbr15.2027.league${id}`, `global.leagueabbr15.${id}`], `League #${id}`);
+  const club = id => loc([`global.teamFull.2027.team${id}`, `global.teamFull.2026.team${id}`, `global.teamFull.${id}`, `global.teamabbr15.2027.team${id}`, `global.teamabbr15.${id}`], `Club #${id}`);
   const POS = ['GK', 'SW', 'RWB', 'RB', 'CB', 'CB', 'CB', 'LB', 'LWB', 'CDM', 'CDM', 'CDM', 'RM', 'CM', 'CM', 'CM', 'LM', 'CAM', 'CAM', 'CAM', 'CF', 'CF', 'CF', 'RW', 'ST', 'ST', 'ST', 'LW'];
   const pos = p => (typeof p === 'number' ? POS[p] || null : typeof p === 'string' ? p.toUpperCase() : null);
   const nameOf = i => { try { const s = i.getStaticData ? i.getStaticData() : i._staticData; if (s && s.name) return s.name; } catch { /* ignore */ } return `Player ${i.definitionId}`; };
   const items = {}; // eaId -> live EA item (needed to submit)
+
+  function isUntradeable(i) {
+    try {
+      if (typeof i.isUntradeable === 'function') return !!i.isUntradeable();
+      if (typeof i.untradeable === 'boolean') return i.untradeable;
+      if (i.untradeableCount > 0 || i._untradeable === true) return true;
+      if (typeof i.isTradeable === 'function') return !i.isTradeable();
+    } catch { /* ignore */ }
+    return !!i.untradeable;
+  }
 
   function mapItem(i) {
     let ps = [pos(i.preferredPosition), ...(i.possiblePositions || []).map(pos)].filter(Boolean);
@@ -60,7 +70,7 @@
       id: `ea${i.id}`, eaId: i.id, definitionId: i.definitionId, name: nameOf(i), rating: i.rating, positions: ps,
       nation: nation(i.nationId), league: league(i.leagueId), club: club(i.teamId),
       rarity: rf === 12 ? 'icon' : rf > 0 ? 'rare' : 'common', rare: rf > 0,
-      untradeable: !!i.untradeable,
+      untradeable: isUntradeable(i),
       loan: !!((i.isLimitedUse && i.isLimitedUse()) || i.loans > 0),
     };
   }
@@ -174,10 +184,11 @@
   // below the cheapest price seen while the results page is full, until nothing
   // cheaper appears. Searches are spaced out and capped per hour, because EA
   // locks the market (or shows a captcha) when it's searched too fast.
-  const PRICE_TTL = 30 * 60000;
+  const PRICE_TTL = 6 * 3600000; // how long a price is shown
+  const FRESH = 30 * 60000;       // how old a price may be when relisting
   let lastSearch = 0;
   let stopPricing = false;
-  const priceOf = defId => { const c = S.prices[defId]; return c && Date.now() - c.at < PRICE_TTL ? c : null; };
+  const priceOf = (defId, maxAge = PRICE_TTL) => { const c = S.prices[defId]; return c && Date.now() - c.at < maxAge ? c : null; };
 
   function searchCount() {
     const now = Date.now();
@@ -203,7 +214,7 @@
   }
 
   async function marketPrice(defId, force) {
-    const cached = !force && priceOf(defId);
+    const cached = !force && priceOf(defId, typeof force === 'number' ? force : PRICE_TTL);
     if (cached) return cached.p;
     let best = null; let maxBuy = null; let seen = 0;
     for (let round = 0; round < 5; round++) {
@@ -218,10 +229,32 @@
     }
     S.prices[defId] = { p: best, at: Date.now(), seen };
     save();
+    const who = (S.club || []).find(x => x.definitionId === defId);
+    log(`Price ${who ? who.name : defId}: ${best ? fmt(best) : 'no listings found'} (${seen} listings seen).`, best ? 'info' : 'bad');
     return best;
   }
 
   const kfmt = n => (n == null ? '—' : n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e4 ? `${(n / 1e3).toFixed(1)}k` : fmt(n));
+
+  let bgBusy = false; let bgNext = 0;
+  async function backgroundPrice() {
+    if (!S.bgPrices || bgBusy || !S.club || Date.now() < bgNext || ui.busy) return;
+    const budget = Math.min(S.limits.search - 10, S.bgPerHour || 40);
+    const bgCount = (S.bgSearches = (S.bgSearches || []).filter(t => Date.now() - t < 3600000)).length;
+    if (bgCount >= budget || searchCount() >= S.limits.search - 10) return;
+    const seenDef = new Set();
+    const next = S.club.filter(x => !x.untradeable && !S.locked[x.definitionId] && !priceOf(x.definitionId) && !seenDef.has(x.definitionId) && seenDef.add(x.definitionId))
+      .sort((a, b) => b.rating - a.rating)[0];
+    if (!next) return;
+    bgBusy = true;
+    try {
+      const before = S.searches.length;
+      await marketPrice(next.definitionId);
+      for (let k = before; k < S.searches.length; k++) S.bgSearches.push(Date.now());
+      save(); render();
+    } catch (e) { log(`Background price check paused: ${e.message}`, 'bad'); bgNext = Date.now() + 10 * 60000; }
+    finally { bgBusy = false; bgNext = Math.max(bgNext, Date.now() + 30000 + Math.random() * 20000); }
+  }
 
   // ------------------------------------------------------------ submission limits
   function subCounts() {
@@ -385,7 +418,19 @@
       }
     };
     walk(document.body, 0);
-    return `mode=${mode} nav=${!!findNav()} content=${content ? content.className : 'none'} url=${location.pathname}\n${out.join('\n')}`;
+    let sample = '';
+    try {
+      const it = Object.values(items)[0];
+      if (it) {
+        const own = Object.keys(it).map(k => `${k}=${typeof it[k] === 'object' ? (it[k] && it[k].constructor ? it[k].constructor.name : 'obj') : String(it[k]).slice(0, 20)}`);
+        const fns = []; let pr = Object.getPrototypeOf(it);
+        for (let d = 0; pr && d < 3; d++, pr = Object.getPrototypeOf(pr)) fns.push(...Object.getOwnPropertyNames(pr).filter(n => /trad|price|name|untrad|league|nation|team|rare|loan/i.test(n)));
+        sample = `\nITEM ${own.join(' ')}\nFNS ${[...new Set(fns)].join(' ')}`;
+      }
+      const lk = services.Localization.localize(`global.leagueFull.2027.league13`);
+      sample += `\nLOC ${lk}`;
+    } catch (e) { sample += `\nsample error ${e.message}`; }
+    return `mode=${mode} nav=${!!findNav()} content=${content ? content.className : 'none'} url=${location.pathname}${sample}\n${out.join('\n')}`;
   }
 
   function confirmBox() {
@@ -432,7 +477,7 @@
         <div class="row"><button class="btn primary" data-a="priceBatch" ${ui.busy ? 'disabled' : ''}>Price my top tradeables</button>${ui.busy ? '<button class="btn" data-a="stopPrice">Stop</button>' : ''}</div>
         <div class="row"><input type="search" placeholder="Search name, league, nation…" data-in="q" value="${h(ui.q)}"><button class="btn" data-a="loadClub">Reload</button></div>
         <ul class="players">${list.map(p => `<li><span class="badge ${q(p.rating)}">${p.rating}</span><div class="grow"><b>${h(p.name)}</b><small>${h(p.positions.join('/'))} · ${h(p.league)}${p.untradeable ? ' · UT' : ''}</small></div>
-          ${p.untradeable ? '' : `<button class="price ${priceOf(p.definitionId) ? 'on' : ''}" data-a="price1" data-d="${p.definitionId}">${priceOf(p.definitionId) ? kfmt(priceOf(p.definitionId).p) : 'price?'}</button>`}
+          ${p.untradeable ? '' : `<button class="price ${priceOf(p.definitionId) ? 'on' : ''}" data-a="price1" data-d="${p.definitionId}">${priceOf(p.definitionId) ? (priceOf(p.definitionId).p ? kfmt(priceOf(p.definitionId).p) : 'none') : 'price?'}</button>`}
           <button class="lock ${S.locked[p.definitionId] ? 'on' : ''}" data-a="lock" data-d="${p.definitionId}">${S.locked[p.definitionId] ? '🔒' : '🔓'}</button></li>`).join('')}</ul>`;
     },
     trades() {
@@ -455,7 +500,7 @@
         <label class="chk"><input type="checkbox" data-in="undercut" ${S.undercut ? 'checked' : ''}> Smart relist: list one price step under the cheapest</label>
         <label class="chk"><input type="checkbox" data-in="floorBE" ${S.floorBE ? 'checked' : ''}> Never relist below what I paid (after tax)</label>
         ${expired ? `<h3>Expired</h3><ul class="players">${t.filter(i => i.state === 'expired').map(i => `<li><span class="badge ${q(i.rating)}">${i.rating}</span><div class="grow"><b>${h(i.name)}</b><small>listed ${fmt(i.bin)}${i.paid ? ` · paid ${fmt(i.paid)}` : ''}</small></div>
-          <button class="price ${priceOf(i.defId) ? 'on' : ''}" data-a="price1" data-d="${i.defId}">${priceOf(i.defId) ? kfmt(priceOf(i.defId).p) : 'price?'}</button></li>`).join('')}</ul>` : ''}`;
+          <button class="price ${priceOf(i.defId) ? 'on' : ''}" data-a="price1" data-d="${i.defId}">${priceOf(i.defId) ? (priceOf(i.defId).p ? kfmt(priceOf(i.defId).p) : 'none') : 'price?'}</button></li>`).join('')}</ul>` : ''}`;
     },
     settings() {
       return `<h3>SBC submission limits</h3>
@@ -464,6 +509,8 @@
         <h3>Market price checks</h3>
         <p class="hint">Searches this hour: <b>${searchCount()}/${S.limits.search}</b>. Searches are spaced 2–4 seconds apart; prices are remembered for 30 minutes.</p>
         <div class="row"><label>Searches per hour<input type="number" min="10" data-in="ls" value="${S.limits.search}"></label></div>
+        <label class="chk"><input type="checkbox" data-in="bg" ${S.bgPrices ? 'checked' : ''}> Check prices in the background (one search every 30–50 s, up to ${S.bgPerHour || 40} per hour, best players first)</label>
+        <p class="hint">${S.club ? `${S.club.filter(x => !x.untradeable && priceOf(x.definitionId)).length} of ${S.club.filter(x => !x.untradeable).length} tradeable players priced.` : ''}</p>
         <label class="chk"><input type="checkbox" data-in="ut" ${S.onlyUT ? 'checked' : ''}> Solve with untradeable players only</label>
         <p class="warn">Automating the EA Web App is against EA's terms. EA can restrict or ban accounts for it.</p>
         <h3>Activity</h3>
@@ -648,7 +695,7 @@
         for (const i of ex) {
           if (stopPricing) break;
           ui.busy = `Smart relisting… ${done + kept + none + 1}/${ex.length} (${i.name})`; render();
-          const m = await marketPrice(i.defId);
+          const m = await marketPrice(i.defId, FRESH);
           if (!m) { none++; continue; }
           let bin = S.undercut ? E.roundToMarket(m - E.priceStep(m), 'down') : m;
           if (S.floorBE && i.paid) bin = Math.max(bin, E.roundToMarket(Math.ceil(i.paid / 0.95), 'up'));
@@ -689,6 +736,7 @@
     if (k === 'lh') S.limits.hour = Math.max(1, +e.target.value || 90);
     if (k === 'ld') S.limits.day = Math.max(1, +e.target.value || 300);
     if (k === 'ut') S.onlyUT = e.target.checked;
+    if (k === 'bg') S.bgPrices = e.target.checked;
     if (k === 'ls') S.limits.search = Math.max(10, +e.target.value || 150);
     if (k === 'undercut') S.undercut = e.target.checked;
     if (k === 'floorBE') S.floorBE = e.target.checked;
@@ -710,6 +758,10 @@
     }
     if (mode) { placeHost(); render(); }
     if (tries === 1) setTimeout(() => { loadSets().catch(() => {}); }, 1500);
+    if (mode && ready()) {
+      if (!S.club && !ui.busy && tries === 3) loadClub().catch(() => {});
+      backgroundPrice();
+    }
     setTimeout(mount, mode === 'tab' ? 2000 : 1000);
   })();
 
