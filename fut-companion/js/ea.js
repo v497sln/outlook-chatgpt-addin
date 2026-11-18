@@ -114,7 +114,7 @@ async function job(body, timeoutMs = 120000, onProgress = null) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
     await sleep(600);
-    const raw = await exec(`JSON.stringify({ r: window.__ss && window.__ss.res[${JSON.stringify(id)}] || null, p: window.__ss && window.__ss.progress })`);
+    const raw = await exec(`JSON.stringify({ r: window.__ss && window.__ss.res[${JSON.stringify(id)}] || null, p: window.__ss && window.__ss.progress != null ? { n: window.__ss.progress, batch: (window.__ss.partial || []).splice(0) } : null })`);
     const box = raw ? JSON.parse(raw) : {};
     const r = box.r;
     if (onProgress && box.p != null) onProgress(box.p);
@@ -205,11 +205,16 @@ function guarded(label, fn) {
 export function readAccount() {
   return guarded('Loading your account', async () => {
     const a = await job(`
-      var u = services.User.getUser(), c = null;
-      try { c = u.getCurrency(GameCurrency.COINS).amount; } catch (e) {}
-      if (c == null) try { c = u.coins.amount; } catch (e) {}
-      if (c == null) try { c = (u.currencies || []).filter(function (x) { return /coin/i.test(x.name); })[0].amount; } catch (e) {}
-      return { coins: c, name: u.personaName || '' };`, 30000);
+      var u = services.User.getUser(), c = null, name = '';
+      // The coin counter in EA's own header is the most reliable source.
+      try { var el = document.querySelector('.view-navbar-currency-coins'); if (el) c = parseInt(el.textContent.replace(/[^0-9]/g, ''), 10); } catch (e) {}
+      if (c == null || isNaN(c)) try { c = u.coins.amount; } catch (e) {}
+      if (c == null || isNaN(c)) try { c = (u.currencies || []).filter(function (x) { return /coin/i.test(x.name); })[0].amount; } catch (e) {}
+      try { name = u.personaName || ''; } catch (e) {}
+      if (!name) try { name = u.getSelectedPersona().name; } catch (e) {}
+      if (!name) try { name = u.selectedPersona.name; } catch (e) {}
+      if (!name) try { name = document.querySelector('.view-navbar-clubinfo-name').textContent.trim(); } catch (e) {}
+      return { coins: (c == null || isNaN(c)) ? null : c, name: name };`, 30000);
     if (a.coins != null) state.coins = a.coins;
     if (a.name) state.persona = a.name;
     return a;
@@ -217,27 +222,42 @@ export function readAccount() {
 }
 
 // ---------------------------------------------------------------- club
-export function importClub() {
-  return guarded('Reading your club', async () => {
-    const players = await job(`
-      var ss = window.__ss, out = [], offset = 0, count = 91;
-      ss.progress = 0;
-      for (var page = 0; page < 60; page++) {
+// Streams players back in batches (onBatch) while it pages through the club.
+// Stops when EA starts returning players it has already sent, so it can't loop.
+export function importClub(onBatch = () => {}) {
+  return guarded('Loading your club', async () => {
+    let total = 0;
+    const res = await job(`
+      var ss = window.__ss, seen = {}, offset = 0, count = 91, n = 0, pages = 0, repeats = 0;
+      ss.partial = []; ss.progress = 0;
+      for (var page = 0; page < 120; page++) {
         var c = new UTSearchCriteriaDTO();
         c.type = SearchType.PLAYER; c.count = count; c.offset = offset;
         var r = await ss.obs(services.Club.search(c));
-        var items = (r.response && r.response.items) || [];
-        items.forEach(function (i) { ss.items[i.id] = i; out.push(ss.mapItem(i)); });
-        ss.progress = out.length;
-        if (!items.length || r.response.retrievedAll || items.length < count) break;
+        pages++;
+        var items = (r.response && r.response.items) || [], fresh = 0;
+        items.forEach(function (i) {
+          if (seen[i.id]) return;
+          seen[i.id] = 1; fresh++; n++;
+          ss.items[i.id] = i;
+          ss.partial.push(ss.mapItem(i));
+        });
+        ss.progress = n;
+        if (!items.length || r.response.retrievedAll === true || items.length < count) break;
+        if (!fresh && ++repeats >= 2) break;
         offset += items.length;
-        await ss.human();
+        await ss.wait(60);
       }
+      await ss.wait(700); // let the last batch be collected
       ss.progress = null;
-      return out;`, 300000, n => { state.task = `Loading your club… ${n} players`; onChange(); });
-    const usable = players.filter(p => !p.loan);
-    log(`Read ${players.length} players (${players.length - usable.length} loans skipped).`, 'good');
-    return usable;
+      return { n: n, pages: pages, repeats: repeats };`, 300000, p => {
+      total = p.n;
+      state.task = `Loading your club… ${p.n} players`;
+      if (p.batch && p.batch.length) onBatch(p.batch.filter(x => !x.loan));
+      onChange();
+    });
+    log(`Club loaded: ${res.n} players in ${res.pages} requests${res.repeats ? ' (EA repeated players; stopped)' : ''}.`, 'good');
+    return res.n || total;
   });
 }
 

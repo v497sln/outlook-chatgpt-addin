@@ -455,12 +455,12 @@ function liveHome() {
   const expired = S.trades.filter(x => x.status === 'unsold').length;
   return `
     <section class="acct">
-      <div><small class="muted">Logged in as</small><b>${h(st.persona)}</b></div>
+      <div><small class="muted">Logged in as</small><b>${h(st.persona && st.persona !== 'connected' ? st.persona : 'EA account')}</b></div>
       <div class="coins">${st.coins != null ? `${fmt(st.coins)} ${coin}` : ''}</div>
     </section>
     ${st.task ? `<div class="syncbar"><span class="spin"></span>${h(st.task)}</div>` : `<p class="hint">Updated ${S.settings.eaLastSync ? ago(S.settings.eaLastSync) : 'just now'} · refreshes every few minutes</p>`}
     <div class="stats">
-      ${statTile('Club players', S.club.length || (st.task ? '…' : 0))}
+      ${statTile('Club players', fmt(S.club.length))}
       ${statTile('Untradeable', fmt(c.untr))}
       ${statTile('On transfer list', t.listed)}
       ${statTile('Expired', expired, expired ? 'warn' : '')}
@@ -655,14 +655,22 @@ const A = {
   eaSync: () => eaSyncAll(false),
   async eaImport(quiet) {
     try {
-      const players = await EA.importClub();
+      // Last session's club stays on screen until the fresh copy is complete;
+      // on a first load, players appear as they arrive.
       const keep = new Map(S.club.filter(p => p.eaId).map(p => [p.definitionId, p]));
-      const imported = players.map(p => {
+      const hadCache = keep.size > 0;
+      const fresh = [];
+      const toLocal = p => {
         const old = keep.get(p.definitionId);
         return { id: `ea${p.eaId}`, ...p, count: 1, price: old?.price || 0, protected: old?.protected || false };
+      };
+      let last = 0;
+      await EA.importClub(batch => {
+        fresh.push(...batch.map(toLocal));
+        if (!hadCache && Date.now() - last > 800) { last = Date.now(); S.club = [...S.club.filter(p => !p.eaId), ...fresh]; render(); }
       });
-      S.club = [...S.club.filter(p => !p.eaId), ...imported];
-      persist(); render(); if (!quiet) toast(`Imported ${imported.length} players from EA`);
+      S.club = [...S.club.filter(p => !p.eaId), ...fresh];
+      persist(); render(); if (!quiet) toast(`Loaded ${fresh.length} players from EA`);
     } catch (e) { if (quiet) throw e; toast(e.message, 'bad'); }
   },
   async eaTransfers(quiet) {
