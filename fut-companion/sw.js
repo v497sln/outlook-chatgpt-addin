@@ -1,7 +1,7 @@
 // Cache-first service worker: the whole app works offline after the first visit.
 const CACHE = 'squadsage-v1';
 const FILES = ['./', 'index.html', 'styles.css', 'icon.svg', 'manifest.webmanifest',
-  'js/app.js', 'js/engine.js', 'js/data.js', 'js/store.js', 'js/solver-worker.js'];
+  'js/app.js', 'js/ea.js', 'js/engine.js', 'js/data.js', 'js/store.js', 'js/solver-worker.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

@@ -234,3 +234,13 @@ html, body { overflow-x: hidden; }
   .trade .grow { flex-basis: calc(100% - 90px); }
   .trade .acts { width: 100%; justify-content: flex-end; }
 }
+
+/* EA account panel */
+.pill.on { color: var(--good); border-color: color-mix(in srgb, var(--good) 50%, var(--line)); }
+.ea .row { margin-top: 10px; }
+.ealog { margin-top: 12px; font-size: 13px; }
+.ealog summary { cursor: pointer; color: var(--muted); }
+.ealog ul { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; }
+.ealog li { color: var(--muted); }
+.ealog li.good { color: var(--good); } .ealog li.bad { color: var(--bad); }
+.ealog time { font-variant-numeric: tabular-nums; opacity: .7; margin-right: 6px; }

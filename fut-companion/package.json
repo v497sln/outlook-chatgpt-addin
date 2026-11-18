@@ -3,9 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Offline FUT companion: SBC solver, squad builder and trade tracker. No account login.",
+  "description": "FUT companion: SBC solver, squad builder, trade tracker and optional EA Web App automation.",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "start": "python3 -m http.server 8080"
+    "start": "python3 -m http.server 8080",
+    "build": "node build.mjs",
+    "build:www": "node build-www.mjs",
+    "android:sync": "node build-www.mjs && npx cap sync android",
+    "android:apk": "node build-www.mjs && npx cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2",
+    "cordova-plugin-inappbrowser": "7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2",
+    "@capacitor/assets": "3.0.5"
   }
 }

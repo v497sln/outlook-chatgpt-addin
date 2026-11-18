@@ -1,12 +1,13 @@
 import * as E from './engine.js';
 import { FORMATIONS, formation, TEMPLATES, sampleClub, DEFAULT_PRICES } from './data.js';
 import * as Store from './store.js';
+import * as EA from './ea.js';
 
 let S = Store.load();
 
 const ui = {
   tab: 'home',
-  sbc: { name: 'Custom SBC', formation: '4-3-3', reqs: [{ t: 'rating', n: 83 }], from: null },
+  sbc: { name: 'Custom SBC', formation: '4-3-3', reqs: [{ t: 'rating', n: 83 }], from: null, custom: null, ea: null, unsupported: [] },
   newReq: { t: 'rating', op: 'min', n: 1, attr: 'league', value: '', min: '', max: '' },
   result: null,
   solving: false,
@@ -17,6 +18,7 @@ const ui = {
 };
 
 // ---------------------------------------------------------------- helpers
+const sbcFormation = () => ui.sbc.custom || formation(ui.sbc.formation);
 const $ = s => document.querySelector(s);
 const h = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = n => Math.round(n || 0).toLocaleString();
@@ -147,6 +149,7 @@ const VIEWS = {
           <button class="btn" data-a="go" data-tab="trades">Track trades</button>
         </div>
       </section>
+      ${eaCard()}
       ${empty ? `<div class="callout">
         <b>Your club is empty.</b> Import your club as CSV, add players by hand, or try the app with a fictional sample club.
         <div class="row gap"><button class="btn small primary" data-a="importOpen">Import club</button>
@@ -205,6 +208,7 @@ const VIEWS = {
     }
 
     return `
+      ${eaSbcBar()}
       <h2 class="sec first">Pick a challenge</h2>
       <div class="chips">
         ${TEMPLATES.map(t => `<button class="chip ${s.from === t.id ? 'on' : ''}" data-a="tpl" data-id="${t.id}">${h(t.name)}</button>`).join('')}
@@ -214,12 +218,13 @@ const VIEWS = {
       <div class="panel">
         <div class="grid2">
           <label>Name<input data-in="sbc.name" value="${h(s.name)}"></label>
-          <label>Formation${select('sbc.formation', Object.keys(FORMATIONS), s.formation)}</label>
+          <label>Formation${s.custom ? `<input value="EA squad: ${h(s.custom.slots.map(x => x.pos).join(' '))}" disabled>` : select('sbc.formation', Object.keys(FORMATIONS), s.formation)}</label>
         </div>
         <h3>Requirements</h3>
         <ul class="reqs">
           ${s.reqs.length ? s.reqs.map((r, i) => `<li><span>${h(E.describeReq(r))}</span><button class="icon-btn" data-a="rmReq" data-i="${i}" aria-label="Remove">×</button></li>`).join('') : '<li class="muted">No requirements yet — add one below.</li>'}
         </ul>
+        ${s.ea && s.unsupported.length ? `<div class="callout bad">Not understood yet, so check these yourself (auto-submit is off): ${s.unsupported.map(h).join(', ')}</div>` : ''}
         <details class="addreq" ${s.reqs.length ? '' : 'open'}>
           <summary>Add requirement</summary>
           <div class="grid2">
@@ -350,12 +355,50 @@ const VIEWS = {
   },
 };
 
+function eaSubmitBlock(r) {
+  if (!ui.sbc.ea) return 'this challenge was not loaded from EA';
+  if (EA.state.status !== 'ready') return 'your EA account is not connected';
+  if (ui.sbc.unsupported.length) return 'some EA requirements could not be read';
+  if (r.squad.some(p => p.source === 'market')) return 'the squad needs cards you would have to buy first';
+  if (r.squad.some(p => !p.eaId)) return 'some cards were not imported from EA';
+  return '';
+}
+const canEaSubmit = r => !eaSubmitBlock(r);
+
+function eaCard() {
+  const st = EA.state;
+  const native = EA.available();
+  const label = { off: 'Not connected', opening: 'Opening EA Web App…', waiting: 'Waiting for you to log in…', ready: `Connected · ${st.persona}`, busy: 'Working…' }[st.status];
+  const busy = st.status === 'busy' ? 'disabled' : '';
+  return `<section class="panel ea">
+    <div class="row between center"><h2 class="sec flat">EA account</h2><span class="pill ${st.status === 'ready' || st.status === 'busy' ? 'on' : ''}">${h(label)}</span></div>
+    ${!native ? '<p class="hint">Connecting your EA account works in the SquadSage Android app. In a browser, import your club as CSV instead.</p>' : ''}
+    ${native && st.status === 'off' ? `<p class="hint">You log in on EA's own Web App page inside SquadSage. Your password goes only to EA. <b class="bad">Automating the Web App is against EA's terms and can get your account restricted or banned.</b></p>
+      <button class="btn primary" data-a="eaConnect">Connect EA account</button>` : ''}
+    ${native && (st.status === 'waiting' || st.status === 'opening') ? '<div class="row gap wrap"><button class="btn" data-a="eaShow">Show EA login</button><button class="btn" data-a="eaOff">Cancel</button></div>' : ''}
+    ${st.status === 'ready' || st.status === 'busy' ? `<div class="row gap wrap">
+      <button class="btn small primary" data-a="eaImport" ${busy}>Import club</button>
+      <button class="btn small" data-a="eaTransfers" ${busy}>Sync transfer list</button>
+      <button class="btn small" data-a="eaRelist" ${busy}>Relist expired</button>
+      <button class="btn small" data-a="eaShow">Open Web App</button>
+      <button class="btn small danger" data-a="eaOff">Disconnect</button></div>` : ''}
+    ${st.log.length ? `<details class="ealog"><summary>Activity (${st.log.length})</summary><ul>${st.log.slice(0, 20).map(l => `<li class="${l.kind}"><time>${new Date(l.at).toLocaleTimeString()}</time> ${h(l.msg)}</li>`).join('')}</ul>
+      <button class="btn tiny" data-a="eaCopyLog">Copy log</button></details>` : ''}
+  </section>`;
+}
+
+function eaSbcBar() {
+  if (EA.state.status !== 'ready' && EA.state.status !== 'busy') return '';
+  return `<div class="panel row between center wrap gap first"><div><b>EA SBCs</b><small class="muted" style="display:block">Load a live challenge from your account</small></div>
+    <button class="btn small primary" data-a="eaSbcs" ${EA.state.status === 'busy' ? 'disabled' : ''}>Load from EA</button></div>`;
+}
+
 function renderResult() {
   const r = ui.result;
   if (!r) return '';
   if (r.error) return `<div class="callout bad">${h(r.error)}</div>`;
   if (!r.squad) return `<div class="callout bad">${h(r.reason)}</div>`;
-  const f = formation(ui.sbc.formation);
+  const f = sbcFormation();
   const ev = r.eval;
   const fromClub = r.squad.filter(p => p.source === 'club');
   const buys = r.squad.filter(p => p.source === 'market');
@@ -379,8 +422,10 @@ function renderResult() {
     <div class="row gap wrap">
       <button class="btn" data-a="solveAgain">Try another solution</button>
       <button class="btn" data-a="copyList">Copy list</button>
-      ${r.ok ? '<button class="btn primary" data-a="submitted">I submitted it</button>' : ''}
+      ${r.ok && canEaSubmit(r) ? '<button class="btn primary" data-a="eaSubmit">Submit to EA</button>' : ''}
+      ${r.ok ? `<button class="btn ${canEaSubmit(r) ? '' : 'primary'}" data-a="submitted">I submitted it</button>` : ''}
     </div>
+    ${r.ok && ui.sbc.ea && !canEaSubmit(r) ? `<p class="hint">Submit to EA is off: ${h(eaSubmitBlock(r))}.</p>` : ''}
     <p class="hint">“I submitted it” removes the club cards used so your next solve stays accurate. You can undo.</p>`;
 }
 
@@ -412,7 +457,7 @@ function runSolve(newSeed = false) {
   if (newSeed) ui.seed++;
   ui.solving = true; render();
   const payload = {
-    club: S.club, formation: formation(ui.sbc.formation), reqs: ui.sbc.reqs,
+    club: S.club, formation: sbcFormation(), reqs: ui.sbc.reqs,
     priceTable: S.prices, useMarket: S.settings.useMarket,
     timeMs: S.settings.thorough ? 4000 : 1500, seed: ui.seed * 7919,
   };
@@ -503,11 +548,100 @@ const A = {
   },
   close: closeModal,
 
+  // EA account
+  eaConnect() {
+    if (S.settings.eaWarned) return EA.connect();
+    askConfirm("SquadSage will automate the EA Web App for you: reading your club, submitting SBCs and relisting. This is against EA's terms and EA can restrict or ban accounts for it. You use it at your own risk.", 'I understand, connect', () => {
+      S.settings.eaWarned = true; persist(); closeModal(); EA.connect();
+    });
+  },
+  eaShow: () => EA.show(),
+  eaOff: () => { EA.disconnect(); render(); },
+  async eaCopyLog() {
+    const text = EA.state.log.map(l => `${new Date(l.at).toISOString()} [${l.kind}] ${l.msg}`).join('\n');
+    try { await navigator.clipboard.writeText(text); toast('Log copied'); } catch { showText('Activity log', 'log.txt', text, 'text/plain'); }
+  },
+  async eaImport() {
+    try {
+      const players = await EA.importClub();
+      const keep = new Map(S.club.filter(p => p.eaId).map(p => [p.definitionId, p]));
+      const imported = players.map(p => {
+        const old = keep.get(p.definitionId);
+        return { id: `ea${p.eaId}`, ...p, count: 1, price: old?.price || 0, protected: old?.protected || false };
+      });
+      S.club = [...S.club.filter(p => !p.eaId), ...imported];
+      persist(); render(); toast(`Imported ${imported.length} players from EA`);
+    } catch (e) { toast(e.message, 'bad'); }
+  },
+  async eaTransfers() {
+    try {
+      const items = await EA.readTransferList();
+      const byEa = new Map(S.trades.filter(t => t.eaId).map(t => [t.eaId, t]));
+      for (const i of items) {
+        const status = i.tradeState === 'closed' ? 'sold' : i.tradeState === 'expired' ? 'unsold' : i.tradeState === 'active' ? 'listed' : null;
+        if (!status) continue;
+        const t = byEa.get(i.eaId) || { id: uid(), eaId: i.eaId, at: Date.now(), buy: i.paid || 0 };
+        Object.assign(t, { name: `${i.rating} ${i.name}`, list: i.bin || t.list || 0, status });
+        if (status === 'sold') t.soldFor = i.bid || i.bin;
+        if (!byEa.has(i.eaId)) S.trades.unshift(t);
+      }
+      persist(); render(); toast(`Synced ${items.length} transfer list items`);
+    } catch (e) { toast(e.message, 'bad'); }
+  },
+  async eaRelist() {
+    try { await EA.relistExpired(); await A.eaTransfers(); } catch (e) { toast(e.message, 'bad'); }
+  },
+  async eaSbcs() {
+    try {
+      const sets = await EA.loadSbcs();
+      openModal(`<h2>EA SBCs</h2><ul class="list picker">${sets.map(s => `<li><button class="li li-main" data-a="eaSet" data-id="${s.id}"><b>${h(s.name)}</b><small>${s.done}/${s.challenges} done</small></button></li>`).join('') || '<li class="li muted">No open SBCs found.</li>'}</ul>
+        <button class="btn" data-a="close">Close</button>`);
+    } catch (e) { toast(e.message, 'bad'); }
+  },
+  async eaSet(el) {
+    openModal('<h2>Loading challenges…</h2><p class="hint">This takes a few seconds. Requests are spaced out on purpose.</p>');
+    try {
+      const list = await EA.loadChallenges(el.dataset.id);
+      ui.eaChallenges = list;
+      openModal(`<h2>Pick a challenge</h2><ul class="list picker">${list.map((c, i) => `<li><button class="li li-main" data-a="eaPick" data-i="${i}"><b>${h(c.name)}</b>
+        <small>${c.reqs.length} requirements${c.bricks ? ' · has locked slots' : ''}</small></button></li>`).join('') || '<li class="li muted">All challenges in this set are done.</li>'}</ul>
+        <button class="btn" data-a="close">Close</button>`);
+    } catch (e) { closeModal(); toast(e.message, 'bad'); }
+  },
+  eaPick(el) {
+    const c = ui.eaChallenges[+el.dataset.i];
+    const reqs = []; const unsupported = [];
+    for (const r of c.reqs) {
+      const t = EA.translateReq(r);
+      if (t) reqs.push(t); else unsupported.push(`${r.key} ${r.scope} ${r.values.join('/')}`);
+    }
+    if (c.bricks) unsupported.push('locked (brick) slots');
+    const slots = c.slots.filter(Boolean);
+    if (slots.length !== 11) unsupported.push('squad positions (using 4-3-3, chemistry may differ)');
+    ui.sbc = { name: c.name, formation: '4-3-3', reqs, from: null, unsupported,
+      custom: slots.length === 11 ? EA.formationFromSlots(slots) : null,
+      ea: { setId: c.setId, challengeId: c.id } };
+    ui.result = null; closeModal(); render();
+    toast('Challenge loaded. Tap Solve.');
+  },
+  eaSubmit() {
+    const r = ui.result;
+    if (!r?.ok || !canEaSubmit(r)) return;
+    askConfirm(`Submit "${ui.sbc.name}" to EA with these ${r.squad.length} players? They will be used up.`, 'Submit to EA', async () => {
+      closeModal();
+      try {
+        await EA.submitSbc({ ...ui.sbc.ea, eaIds: r.squad.map(p => p.eaId) });
+        A.submitted();
+        toast('Submitted to EA');
+      } catch (e) { toast(e.message, 'bad'); }
+    }, false);
+  },
+
   // SBC
   tpl(el) {
     const t = [...TEMPLATES, ...(S.savedSbcs || [])].find(x => x.id === el.dataset.id);
     if (!t) return;
-    ui.sbc = { name: t.name, formation: t.formation, reqs: clone(t.reqs), from: t.id };
+    ui.sbc = { name: t.name, formation: t.formation, reqs: clone(t.reqs), from: t.id, custom: null, ea: null, unsupported: [] };
     ui.result = null; render();
   },
   delSbc(el) {
@@ -543,7 +677,7 @@ const A = {
   solveAgain: () => runSolve(true),
   async copyList() {
     const r = ui.result; if (!r?.squad) return;
-    const f = formation(ui.sbc.formation);
+    const f = sbcFormation();
     const text = `${ui.sbc.name} (${f.name}) — rating ${r.eval.rating}, chem ${r.eval.chem.total}\n` +
       r.squad.map((p, i) => `${f.slots[i].pos}: ${p.generic ? `BUY any ${p.rating} (~${fmt(p.price)})` : `${p.name} ${p.rating}`}`).join('\n');
     try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { showText('Squad list', 'squad.txt', text, 'text/plain'); }
@@ -742,7 +876,7 @@ function onInput(e) {
   const rerender = e.type === 'change';
   if (k.startsWith('nr.')) { ui.newReq[k.slice(3)] = v; if (rerender && el.tagName === 'SELECT') render(); return; }
   if (k === 'sbc.name') { ui.sbc.name = v; return; }
-  if (k === 'sbc.formation') { ui.sbc.formation = v; ui.result = null; render(); return; }
+  if (k === 'sbc.formation') { ui.sbc.formation = v; ui.sbc.custom = null; ui.sbc.ea = null; ui.result = null; render(); return; }
   if (k.startsWith('set.')) { S.settings[k.slice(4)] = v; persist(); return; }
   if (k === 'sq.formation') { S.squad.formation = v; persist(); render(); return; }
   if (k === 'clubQ') {
@@ -761,10 +895,12 @@ $('#modal').addEventListener('close', () => { ui.pickSlot = null; });
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
 
 // Offline support
-if ('serviceWorker' in navigator && location.protocol !== 'file:' && !globalThis.__SOLVER_SRC) {
+document.addEventListener('deviceready', () => render());
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !globalThis.__SOLVER_SRC && !window.Capacitor) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 window.addEventListener('online', () => $('#net').textContent = 'Online');
 window.addEventListener('offline', () => $('#net').textContent = 'Offline — still works');
 
+EA.setListener(() => { if (!document.activeElement || document.activeElement.tagName !== 'INPUT') render(); });
 render();
