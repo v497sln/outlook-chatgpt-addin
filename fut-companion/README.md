@@ -24,6 +24,7 @@ The Android app opens the official EA FC Web App full-screen (your real cards, c
 - **SBC:** your live SBC sets. Tap a challenge and it's solved straight from your club, with requirement checks. Then submit to EA.
 - **Club:** lock players so the solver never uses them.
 - **Trades:** income and profit after the 5% tax, and relist all expired items.
+- **Live prices:** the lowest Buy Now price from a live market search (it searches again below the cheapest price while the results page is full). These prices drive price chips in Club and Trades, the SBC solver's costs, and **Smart relist**, which relists expired items one price step under the cheapest and never below your break-even unless you allow it. Searches are spaced 2–4 s apart, capped at 150 per hour, and cached for 30 minutes.
 - **Safety:** hourly and daily submission limits (default 90/300) to avoid EA soft-bans, plus an activity log.
 
 Files: `shell.html` (app start screen that opens EA) and `js/overlay.js` (the injected layer, bundled with `js/engine.js` into `www/overlay.bundle.js` by `build-www.mjs`). Automating the Web App is against EA's terms; the app warns about this on first launch.

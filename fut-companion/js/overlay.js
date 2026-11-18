@@ -17,9 +17,10 @@
 
   // ------------------------------------------------------------ storage
   const S = (() => {
-    const base = { locked: {}, subs: [], limits: { hour: 90, day: 300 }, club: null, clubAt: 0, onlyUT: false, log: [] };
+    const base = { locked: {}, subs: [], searches: [], prices: {}, limits: { hour: 90, day: 300, search: 150 }, club: null, clubAt: 0, onlyUT: false, undercut: true, floorBE: true, log: [] };
     try { return Object.assign(base, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { return base; }
   })();
+  S.limits.search = S.limits.search || 150; S.prices = S.prices || {}; S.searches = S.searches || [];
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage full */ } };
   function log(msg, kind = 'info') {
     S.log.unshift({ at: Date.now(), msg, kind });
@@ -166,6 +167,60 @@
     return { name: 'EA squad', slots };
   }
 
+  // ------------------------------------------------------------ live market prices
+  // Lowest Buy Now price on the transfer market. Searches, then searches again
+  // below the cheapest price seen while the results page is full, until nothing
+  // cheaper appears. Searches are spaced out and capped per hour, because EA
+  // locks the market (or shows a captcha) when it's searched too fast.
+  const PRICE_TTL = 30 * 60000;
+  let lastSearch = 0;
+  let stopPricing = false;
+  const priceOf = defId => { const c = S.prices[defId]; return c && Date.now() - c.at < PRICE_TTL ? c : null; };
+
+  function searchCount() {
+    const now = Date.now();
+    S.searches = S.searches.filter(t => now - t < 3600000);
+    return S.searches.length;
+  }
+
+  async function marketSearch(defId, maxBuy) {
+    if (searchCount() >= S.limits.search) throw new Error(`Market search limit reached (${S.limits.search} per hour). Try again later.`);
+    const gap = 2000 + Math.random() * 2000;
+    const wait = lastSearch + gap - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastSearch = Date.now();
+    S.searches.push(lastSearch);
+    const c = new UTSearchCriteriaDTO();
+    c.type = SearchType.PLAYER;
+    c.maskedDefId = defId;
+    if (maxBuy) c.maxBuy = maxBuy;
+    const r = await obs(services.Item.searchTransferMarket(c, 1));
+    return ((r.response && r.response.items) || [])
+      .map(i => ((i.getAuctionData && i.getAuctionData()) || i._auction || {}).buyNowPrice)
+      .filter(v => v > 0);
+  }
+
+  async function marketPrice(defId, force) {
+    const cached = !force && priceOf(defId);
+    if (cached) return cached.p;
+    let best = null; let maxBuy = null; let seen = 0;
+    for (let round = 0; round < 5; round++) {
+      const list = await marketSearch(defId, maxBuy);
+      seen += list.length;
+      if (!list.length) break;
+      const m = Math.min(...list);
+      best = best == null ? m : Math.min(best, m);
+      if (list.length < 20) break;
+      maxBuy = E.roundToMarket(best - E.priceStep(best), 'down');
+      if (maxBuy < 200) break;
+    }
+    S.prices[defId] = { p: best, at: Date.now(), seen };
+    save();
+    return best;
+  }
+
+  const kfmt = n => (n == null ? '—' : n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e4 ? `${(n / 1e3).toFixed(1)}k` : fmt(n));
+
   // ------------------------------------------------------------ submission limits
   function subCounts() {
     const now = Date.now();
@@ -238,9 +293,11 @@
       const list = S.club.filter(p => !qq || `${p.name} ${p.nation} ${p.league} ${p.club} ${p.positions.join(' ')}`.toLowerCase().includes(qq))
         .sort((a, b) => b.rating - a.rating).slice(0, 150);
       return `<div class="stats">${stat('Players', fmt(S.club.length))}${stat('Untradeable', fmt(ut))}${stat('Locked', fmt(locked))}${stat('Loaded', ago(S.clubAt))}</div>
-        <p class="hint">Locked players are never used by the SBC solver. Tap 🔒 to lock or unlock.</p>
+        <p class="hint">Locked players are never used by the SBC solver. Tap 🔒 to lock or unlock. Tap a tradeable player's price to check it live on the market.</p>
+        <div class="row"><button class="btn primary" data-a="priceBatch" ${ui.busy ? 'disabled' : ''}>Price my top tradeables</button>${ui.busy ? '<button class="btn" data-a="stopPrice">Stop</button>' : ''}</div>
         <div class="row"><input type="search" placeholder="Search name, league, nation…" data-in="q" value="${h(ui.q)}"><button class="btn" data-a="loadClub">Reload</button></div>
         <ul class="players">${list.map(p => `<li><span class="badge ${q(p.rating)}">${p.rating}</span><div class="grow"><b>${h(p.name)}</b><small>${h(p.positions.join('/'))} · ${h(p.league)}${p.untradeable ? ' · UT' : ''}</small></div>
+          ${p.untradeable ? '' : `<button class="price ${priceOf(p.definitionId) ? 'on' : ''}" data-a="price1" data-d="${p.definitionId}">${priceOf(p.definitionId) ? kfmt(priceOf(p.definitionId).p) : 'price?'}</button>`}
           <button class="lock ${S.locked[p.definitionId] ? 'on' : ''}" data-a="lock" data-d="${p.definitionId}">${S.locked[p.definitionId] ? '🔒' : '🔓'}</button></li>`).join('')}</ul>`;
     },
     trades() {
@@ -259,12 +316,19 @@
           ${stat('Sold income', fmt(soldIncome))}${stat('Sold profit', sign(soldProfit), soldProfit >= 0 ? 'good' : 'bad')}
         </div>
         <p class="hint">All figures are after EA's 5% tax.${unpriced ? ` ${unpriced} items have no known buy price (packs or SBC rewards) and are left out of profit.` : ''}</p>
-        <div class="row"><button class="btn primary" data-a="relist" ${expired ? '' : 'disabled'}>Relist ${expired} expired</button><button class="btn" data-a="trades">Refresh</button></div>`;
+        <div class="row"><button class="btn primary" data-a="smartRelist" ${expired && !ui.busy ? '' : 'disabled'}>Smart relist ${expired}</button><button class="btn" data-a="relist" ${expired && !ui.busy ? '' : 'disabled'}>Relist at same price</button><button class="btn" data-a="trades">Refresh</button></div>
+        <label class="chk"><input type="checkbox" data-in="undercut" ${S.undercut ? 'checked' : ''}> Smart relist: list one price step under the cheapest</label>
+        <label class="chk"><input type="checkbox" data-in="floorBE" ${S.floorBE ? 'checked' : ''}> Never relist below what I paid (after tax)</label>
+        ${expired ? `<h3>Expired</h3><ul class="players">${t.filter(i => i.state === 'expired').map(i => `<li><span class="badge ${q(i.rating)}">${i.rating}</span><div class="grow"><b>${h(i.name)}</b><small>listed ${fmt(i.bin)}${i.paid ? ` · paid ${fmt(i.paid)}` : ''}</small></div>
+          <button class="price ${priceOf(i.defId) ? 'on' : ''}" data-a="price1" data-d="${i.defId}">${priceOf(i.defId) ? kfmt(priceOf(i.defId).p) : 'price?'}</button></li>`).join('')}</ul>` : ''}`;
     },
     settings() {
       return `<h3>SBC submission limits</h3>
         <p class="hint">EA soft-bans accounts that submit SBCs too fast. SquadSage stops submitting when either limit is reached. It only counts submissions it made itself.</p>
         <div class="row"><label>Per hour<input type="number" min="1" data-in="lh" value="${S.limits.hour}"></label><label>Per day<input type="number" min="1" data-in="ld" value="${S.limits.day}"></label></div>
+        <h3>Market price checks</h3>
+        <p class="hint">Searches this hour: <b>${searchCount()}/${S.limits.search}</b>. Searches are spaced 2–4 seconds apart; prices are remembered for 30 minutes.</p>
+        <div class="row"><label>Searches per hour<input type="number" min="10" data-in="ls" value="${S.limits.search}"></label></div>
         <label class="chk"><input type="checkbox" data-in="ut" ${S.onlyUT ? 'checked' : ''}> Solve with untradeable players only</label>
         <p class="warn">Automating the EA Web App is against EA's terms. EA can restrict or ban accounts for it.</p>
         <h3>Activity</h3>
@@ -313,7 +377,11 @@
 
   function solveFor(p) {
     const exclude = S.onlyUT ? S.club.filter(x => !x.untradeable).map(x => x.id) : [];
-    const clubForSolve = S.club.map(x => (S.locked[x.definitionId] ? { ...x, protected: true } : x));
+    const clubForSolve = S.club.map(x => {
+      const pr = priceOf(x.definitionId);
+      const y = pr && pr.p ? { ...x, price: pr.p } : x;
+      return S.locked[x.definitionId] ? { ...y, protected: true } : y;
+    });
     return E.solve({ club: clubForSolve, formation: p.formation, reqs: p.reqs, useMarket: false, timeMs: 1400, seed: ui.seed * 7919, excludeIds: exclude });
   }
 
@@ -392,7 +460,7 @@
         const r = await obs(services.Item.requestTransferItems());
         ui.trades = ((r.response && r.response.items) || []).map(i => {
           const a = (i.getAuctionData && i.getAuctionData()) || i._auction || {};
-          return { state: a.tradeState || null, bin: a.buyNowPrice || 0, bid: a.currentBid || 0, paid: i.lastSalePrice || 0 };
+          return { id: i.id, defId: i.definitionId, name: nameOf(i), rating: i.rating, state: a.tradeState || null, bin: a.buyNowPrice || 0, bid: a.currentBid || 0, paid: i.lastSalePrice || 0, raw: i };
         });
       });
     },
@@ -402,6 +470,50 @@
         log('Relisted expired items.', 'good'); toast('Relisted');
         A.trades();
       });
+    },
+    async price1(el) {
+      const d = +el.dataset.d;
+      await busy('Checking market price…', async () => {
+        const p = await marketPrice(d, true);
+        toast(p ? `Lowest Buy Now: ${fmt(p)}` : 'None on the market right now');
+      });
+    },
+    stopPrice() { stopPricing = true; },
+    async priceBatch() {
+      const todo = S.club.filter(p => !p.untradeable && !priceOf(p.definitionId)).sort((a, b) => b.rating - a.rating);
+      const seen = new Set(); const list = todo.filter(p => !seen.has(p.definitionId) && seen.add(p.definitionId)).slice(0, 15);
+      if (!list.length) return toast('All tradeables are priced');
+      stopPricing = false;
+      await busy('Checking prices…', async () => {
+        for (let i = 0; i < list.length && !stopPricing; i++) {
+          ui.busy = `Checking prices… ${i + 1}/${list.length} (${list[i].name})`; render();
+          await marketPrice(list[i].definitionId);
+        }
+      });
+      log(`Priced ${list.length} players.`, 'good');
+    },
+    smartRelist() {
+      const ex = (ui.trades || []).filter(i => i.state === 'expired');
+      ask(`Check live prices for ${ex.length} expired items and relist each at the market price? This uses up to ${ex.length * 3} market searches.`, 'Smart relist', () => busy('Smart relisting…', async () => {
+        stopPricing = false;
+        let done = 0, kept = 0, none = 0;
+        for (const i of ex) {
+          if (stopPricing) break;
+          ui.busy = `Smart relisting… ${done + kept + none + 1}/${ex.length} (${i.name})`; render();
+          const m = await marketPrice(i.defId);
+          if (!m) { none++; continue; }
+          let bin = S.undercut ? E.roundToMarket(m - E.priceStep(m), 'down') : m;
+          if (S.floorBE && i.paid) bin = Math.max(bin, E.roundToMarket(Math.ceil(i.paid / 0.95), 'up'));
+          bin = Math.max(200, bin);
+          const start = E.roundToMarket(bin - E.priceStep(bin), 'down');
+          await obs(services.Item.list(i.raw, Math.max(150, start), bin, 3600));
+          done++;
+          await sleep(500 + Math.random() * 600);
+        }
+        log(`Smart relist: ${done} relisted${none ? `, ${none} had no market price (left as is)` : ''}.`, 'good');
+        toast(`Relisted ${done}`);
+        A.trades();
+      }));
     },
     async copylog() {
       const text = S.log.map(l => `${new Date(l.at).toISOString()} [${l.kind}] ${l.msg}`).join('\n');
@@ -429,6 +541,9 @@
     if (k === 'lh') S.limits.hour = Math.max(1, +e.target.value || 90);
     if (k === 'ld') S.limits.day = Math.max(1, +e.target.value || 300);
     if (k === 'ut') S.onlyUT = e.target.checked;
+    if (k === 'ls') S.limits.search = Math.max(10, +e.target.value || 150);
+    if (k === 'undercut') S.undercut = e.target.checked;
+    if (k === 'floorBE') S.floorBE = e.target.checked;
     save();
   });
 
@@ -488,6 +603,8 @@
     .badge.silver { background: #b9c2cf; } .badge.bronze { background: #c98a5a; }
     .slot { width: 36px; color: #8b9ab2; font-size: 12px; font-weight: 700; }
     .chem { color: #3ddc84; font-size: 10px; } .chem.c0 { color: #ff6b6b; }
+    .price { background: #0d1420; color: #8b9ab2; border: 1px solid #26344a; border-radius: 8px; padding: 5px 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
+    .price.on { color: #ffd76a; border-color: #5a4a1b; }
     .lock { background: none; border: 0; font-size: 20px; cursor: pointer; opacity: .55; } .lock.on { opacity: 1; }
     .callout { border-radius: 12px; padding: 10px 12px; margin: 8px 0; border: 1px solid #26344a; }
     .callout.good { color: #3ddc84; border-color: #3ddc8466; } .callout.bad { color: #ff6b6b; border-color: #ff6b6b66; }
