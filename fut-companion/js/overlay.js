@@ -17,9 +17,10 @@
 
   // ------------------------------------------------------------ storage
   const S = (() => {
-    const base = { bgPrices: true, bgPerHour: 40, locked: {}, subs: [], searches: [], prices: {}, limits: { hour: 90, day: 300, search: 150 }, club: null, clubAt: 0, onlyUT: false, undercut: true, floorBE: true, log: [] };
+    const base = { v: 2, bgPrices: false, bgPerHour: 40, locked: {}, subs: [], searches: [], prices: {}, limits: { hour: 90, day: 300, search: 150 }, club: null, clubAt: 0, onlyUT: false, undercut: true, floorBE: true, log: [] };
     try { return Object.assign(base, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { return base; }
   })();
+  if ((S.v || 1) < 2) { S.bgPrices = false; S.v = 2; }
   S.limits.search = S.limits.search || 150; S.prices = S.prices || {}; S.searches = S.searches || [];
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage full */ } };
   function log(msg, kind = 'info') {
@@ -77,7 +78,14 @@
 
   const ready = () => { try { return !!(window.services && services.User && services.User.getUser() && services.Club && services.SBC); } catch { return false; } };
 
-  async function loadClub(onProgress) {
+  let clubLoading = null;
+  let clubProgress = null;
+  function loadClub(onProgress) {
+    if (onProgress) clubProgress = onProgress;
+    if (!clubLoading) clubLoading = loadClubNow(n => clubProgress && clubProgress(n)).finally(() => { clubLoading = null; clubProgress = null; });
+    return clubLoading;
+  }
+  async function loadClubNow(onProgress) {
     const seen = {}; const out = []; let offset = 0; const count = 91; let repeats = 0; const sizes = []; let loans = 0;
     for (let page = 0; page < 120; page++) {
       const c = new UTSearchCriteriaDTO();
@@ -187,7 +195,14 @@
   const PRICE_TTL = 6 * 3600000; // how long a price is shown
   const FRESH = 30 * 60000;       // how old a price may be when relisting
   let lastSearch = 0;
-  let stopPricing = false;
+  let runTok = 0; // bumped by Stop; every long task checks it
+  class Stopped extends Error {}
+  const checkTok = tok => { if (tok !== runTok) throw new Stopped('Stopped'); };
+  async function csleep(ms, tok) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) { checkTok(tok); await sleep(Math.min(150, end - Date.now())); }
+    checkTok(tok);
+  }
   const priceOf = (defId, maxAge = PRICE_TTL) => { const c = S.prices[defId]; return c && Date.now() - c.at < maxAge ? c : null; };
 
   function searchCount() {
@@ -196,11 +211,12 @@
     return S.searches.length;
   }
 
-  async function marketSearch(defId, maxBuy) {
+  async function marketSearch(defId, maxBuy, tok = runTok) {
+    checkTok(tok);
     if (searchCount() >= S.limits.search) throw new Error(`Market search limit reached (${S.limits.search} per hour). Try again later.`);
     const gap = 2000 + Math.random() * 2000;
     const wait = lastSearch + gap - Date.now();
-    if (wait > 0) await sleep(wait);
+    if (wait > 0) await csleep(wait, tok);
     lastSearch = Date.now();
     S.searches.push(lastSearch);
     const c = new UTSearchCriteriaDTO();
@@ -208,17 +224,18 @@
     c.maskedDefId = defId;
     if (maxBuy) c.maxBuy = maxBuy;
     const r = await obs(services.Item.searchTransferMarket(c, 1));
+    checkTok(tok);
     return (body(r).items || [])
       .map(i => ((i.getAuctionData && i.getAuctionData()) || i._auction || {}).buyNowPrice)
       .filter(v => v > 0);
   }
 
-  async function marketPrice(defId, force) {
+  async function marketPrice(defId, force, tok = runTok) {
     const cached = !force && priceOf(defId, typeof force === 'number' ? force : PRICE_TTL);
     if (cached) return cached.p;
     let best = null; let maxBuy = null; let seen = 0;
     for (let round = 0; round < 5; round++) {
-      const list = await marketSearch(defId, maxBuy);
+      const list = await marketSearch(defId, maxBuy, tok);
       seen += list.length;
       if (!list.length) break;
       const m = Math.min(...list);
@@ -229,6 +246,7 @@
     }
     S.prices[defId] = { p: best, at: Date.now(), seen };
     save();
+    paintPrices(defId);
     const who = (S.club || []).find(x => x.definitionId === defId);
     log(`Price ${who ? who.name : defId}: ${best ? fmt(best) : 'no listings found'} (${seen} listings seen).`, best ? 'info' : 'bad');
     return best;
@@ -254,6 +272,83 @@
       save(); render();
     } catch (e) { log(`Background price check paused: ${e.message}`, 'bad'); bgNext = Date.now() + 10 * 60000; }
     finally { bgBusy = false; bgNext = Math.max(bgNext, Date.now() + 30000 + Math.random() * 20000); }
+  }
+
+  // Prices inside EA's own lists: EA draws each player row with a view class;
+  // we wrap its render so a price line is added under EA's own row. EA's card,
+  // player details and actions stay EA's.
+  const hooked = [];
+  function rowItem(view, arg) {
+    const cands = [arg, view && view.data, view && view._data, view && view.item, view && view._item, view && view.model];
+    return cands.find(x => x && typeof x === 'object' && x.definitionId) || null;
+  }
+  function rowEl(view) {
+    try { if (view.getRootElement) return view.getRootElement(); } catch { /* ignore */ }
+    return [view.__root, view._root, view.rootElement, view.element].find(x => x instanceof Element) || null;
+  }
+  function priceText(def, item) {
+    const pr = priceOf(def);
+    if (!pr) return 'Tap for price';
+    return pr.p ? `${kfmt(pr.p)}` : 'none listed';
+  }
+  function decorate(view, arg) {
+    const item = rowItem(view, arg);
+    if (!item || (item.type && item.type !== 'player')) return;
+    const el = rowEl(view);
+    if (!el) return;
+    let tag = el.querySelector('.ss-price');
+    if (!tag) {
+      tag = document.createElement('div');
+      tag.className = 'ss-price';
+      tag.addEventListener('click', ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        const d = +tag.dataset.def;
+        tag.classList.add('ss-loading'); tag.querySelector('b').textContent = 'checking…';
+        marketPrice(d, true).catch(e => { if (!(e instanceof Stopped)) toastAnywhere(e.message); }).finally(() => paintPrices(d));
+      }, true);
+      const anchor = el.querySelector('.rowContent, .entityContainer, .name') || el;
+      (anchor === el ? el : anchor.parentElement).appendChild(tag);
+    }
+    tag.dataset.def = item.definitionId;
+    tag.innerHTML = `<i></i><b>${priceText(item.definitionId, item)}</b>${isUntradeable(item) ? '<span class="ss-ut">untradeable</span>' : ''}`;
+    tag.classList.toggle('ss-none', !priceOf(item.definitionId));
+  }
+  function paintPrices(def) {
+    document.querySelectorAll(`.ss-price[data-def="${def}"]`).forEach(t => {
+      t.classList.remove('ss-loading'); t.classList.toggle('ss-none', !priceOf(def));
+      const b = t.querySelector('b'); if (b) b.textContent = priceText(def);
+    });
+    if (ui.open) render();
+  }
+  function toastAnywhere(msg) { if (ui.open) toast(msg, true); else log(msg, 'bad'); }
+  function hookRows() {
+    const names = Object.getOwnPropertyNames(window).filter(n => /^UT\w*(ItemTableCell|ItemCell|PlayerItem|ItemList|ListItem|ItemRow)\w*View$/.test(n));
+    for (const n of names) {
+      let proto;
+      try { proto = window[n] && window[n].prototype; } catch { continue; }
+      if (!proto) continue;
+      for (const m of ['render', 'setData', 'setItem', 'update']) {
+        const orig = proto[m];
+        if (typeof orig !== 'function' || orig.__ss) continue;
+        const wrapped = function (...a) { const r = orig.apply(this, a); try { decorate(this, a[0]); } catch { /* ignore */ } return r; };
+        wrapped.__ss = true;
+        proto[m] = wrapped;
+        hooked.push(`${n}.${m}`);
+      }
+    }
+    if (hooked.length) log(`Prices shown in EA's lists (${hooked.slice(0, 4).join(', ')}).`, 'good');
+    else log('Could not find EA\'s player row views. Send Safety → Copy page report.', 'bad');
+  }
+  function rowStyle() {
+    if (document.getElementById('ss-rows')) return;
+    const st = document.createElement('style');
+    st.id = 'ss-rows';
+    st.textContent = `.ss-price{display:flex;align-items:center;gap:6px;margin-top:6px;font-weight:700;font-size:15px;color:#f7d75c;cursor:pointer;position:relative;z-index:2}
+      .ss-price i{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe9a3,#d9a930 60%,#a87912);display:inline-block}
+      .ss-price.ss-none b{color:rgba(255,255,255,.6);font-weight:600}
+      .ss-price.ss-loading b{color:rgba(255,255,255,.75)}
+      .ss-price .ss-ut{margin-left:4px;font-size:12px;font-weight:700;color:#cfe0ff;background:rgba(80,110,160,.45);border-radius:6px;padding:1px 6px}`;
+    document.head.appendChild(st);
   }
 
   // ------------------------------------------------------------ submission limits
@@ -305,14 +400,14 @@
     $('.title').textContent = TITLES[ui.view];
     if (!ui.open) return;
     const top = host.scrollTop;
-    $('.body').innerHTML = (ui.busy ? `<div class="busy"><span class="spin"></span>${h(ui.busy)}</div>` : '') + VIEW[ui.view]() + (ui.confirm ? confirmBox() : '');
+    $('.body').innerHTML = (ui.busy ? `<div class="busy"><span class="spin"></span><span class="grow">${h(ui.busy)}</span>${ui.stoppable ? '<button class="btn stop" data-a="stop">Stop</button>' : ''}</div>` : '') + VIEW[ui.view]() + (ui.confirm ? confirmBox() : '');
     host.scrollTop = top;
   }
 
   // ---- placing SquadSage inside EA's own app ---------------------------------
   // mode 'tab':   a SquadSage tab in EA's bottom bar; our page fills EA's content area
   // mode 'float': fallback when EA's bar can't be found; a small button opens a full page
-  let mode = null; let navBtn = null; let content = null; let tries = 0;
+  let mode = null; let navBtn = null; let content = null; let tries = 0; let booted = false; let clubAuto = false;
   const NAV_SEL = ['.ut-tab-bar', 'nav.ut-tab-bar', '.ut-tab-bar-view', 'nav[class*="tab-bar"]', '[class*="tab-bar"]'];
   const CONTENT_SEL = ['.ut-content', '.ut-navigation-container-view--content', '.ut-content-container', 'main'];
 
@@ -427,6 +522,7 @@
         for (let d = 0; pr && d < 3; d++, pr = Object.getPrototypeOf(pr)) fns.push(...Object.getOwnPropertyNames(pr).filter(n => /trad|price|name|untrad|league|nation|team|rare|loan/i.test(n)));
         sample = `\nITEM ${own.join(' ')}\nFNS ${[...new Set(fns)].join(' ')}`;
       }
+      sample += `\nHOOKED ${hooked.join(' ') || 'none'}\nVIEWS ${Object.getOwnPropertyNames(window).filter(n => /^UT\w*View$/.test(n)).slice(0, 120).join(' ')}`;
       const lk = services.Localization.localize(`global.leagueFull.2027.league13`);
       sample += `\nLOC ${lk}`;
     } catch (e) { sample += `\nsample error ${e.message}`; }
@@ -474,7 +570,7 @@
         .sort((a, b) => b.rating - a.rating).slice(0, 150);
       return `<div class="stats">${stat('Players', fmt(S.club.length))}${stat('Untradeable', fmt(ut))}${stat('Locked', fmt(locked))}${stat('Loaded', ago(S.clubAt))}</div>
         <p class="hint">Locked players are never used by the SBC solver. Tap 🔒 to lock or unlock. Tap a tradeable player's price to check it live on the market.</p>
-        <div class="row"><button class="btn primary" data-a="priceBatch" ${ui.busy ? 'disabled' : ''}>Price my top tradeables</button>${ui.busy ? '<button class="btn" data-a="stopPrice">Stop</button>' : ''}</div>
+
         <div class="row"><input type="search" placeholder="Search name, league, nation…" data-in="q" value="${h(ui.q)}"><button class="btn" data-a="loadClub">Reload</button></div>
         <ul class="players">${list.map(p => `<li><span class="badge ${q(p.rating)}">${p.rating}</span><div class="grow"><b>${h(p.name)}</b><small>${h(p.positions.join('/'))} · ${h(p.league)}${p.untradeable ? ' · UT' : ''}</small></div>
           ${p.untradeable ? '' : `<button class="price ${priceOf(p.definitionId) ? 'on' : ''}" data-a="price1" data-d="${p.definitionId}">${priceOf(p.definitionId) ? (priceOf(p.definitionId).p ? kfmt(priceOf(p.definitionId).p) : 'none') : 'price?'}</button>`}
@@ -496,7 +592,7 @@
           ${stat('Sold income', fmt(soldIncome))}${stat('Sold profit', sign(soldProfit), soldProfit >= 0 ? 'good' : 'bad')}
         </div>
         <p class="hint">All figures are after EA's 5% tax.${unpriced ? ` ${unpriced} items have no known buy price (packs or SBC rewards) and are left out of profit.` : ''}</p>
-        <div class="row"><button class="btn primary" data-a="smartRelist" ${expired && !ui.busy ? '' : 'disabled'}>Smart relist ${expired}</button><button class="btn" data-a="relist" ${expired && !ui.busy ? '' : 'disabled'}>Relist at same price</button><button class="btn" data-a="trades">Refresh</button></div>
+        <div class="row"><button class="btn primary" data-a="smartRelist" ${expired && !ui.busy ? '' : 'disabled'}>Relist all at market price (${expired})</button><button class="btn" data-a="relist" ${expired && !ui.busy ? '' : 'disabled'}>Relist at same price</button><button class="btn" data-a="trades">Refresh</button></div>
         <label class="chk"><input type="checkbox" data-in="undercut" ${S.undercut ? 'checked' : ''}> Smart relist: list one price step under the cheapest</label>
         <label class="chk"><input type="checkbox" data-in="floorBE" ${S.floorBE ? 'checked' : ''}> Never relist below what I paid (after tax)</label>
         ${expired ? `<h3>Expired</h3><ul class="players">${t.filter(i => i.state === 'expired').map(i => `<li><span class="badge ${q(i.rating)}">${i.rating}</span><div class="grow"><b>${h(i.name)}</b><small>listed ${fmt(i.bin)}${i.paid ? ` · paid ${fmt(i.paid)}` : ''}</small></div>
@@ -541,9 +637,14 @@
   }
 
   // ------------------------------------------------------------ actions
-  async function busy(label, fn) {
-    ui.busy = label; render();
-    try { return await fn(); } catch (e) { log(`${label.replace('…', '')} failed: ${e.message}`, 'bad'); toast(e.message, true); return null; } finally { ui.busy = ''; render(); }
+  let busyId = 0;
+  async function busy(label, fn, stoppable = false) {
+    const id = ++busyId;
+    ui.busy = label; ui.stoppable = stoppable; render();
+    try { return await fn(); } catch (e) {
+      if (e instanceof Stopped) { log(`${label.replace('…', '')} stopped.`); return null; }
+      log(`${label.replace('…', '')} failed: ${e.message}`, 'bad'); toast(e.message, true); return null;
+    } finally { if (id === busyId) { ui.busy = ''; ui.stoppable = false; render(); } }
   }
 
   async function loadSets() {
@@ -668,47 +769,40 @@
     },
     async price1(el) {
       const d = +el.dataset.d;
-      await busy('Checking market price…', async () => {
+      const who = (S.club || []).find(x => x.definitionId === d);
+      await busy(`Checking price${who ? ` of ${who.name}` : ''}…`, async () => {
         const p = await marketPrice(d, true);
         toast(p ? `Lowest Buy Now: ${fmt(p)}` : 'None on the market right now');
-      });
+      }, true);
     },
-    stopPrice() { stopPricing = true; },
-    async priceBatch() {
-      const todo = S.club.filter(p => !p.untradeable && !priceOf(p.definitionId)).sort((a, b) => b.rating - a.rating);
-      const seen = new Set(); const list = todo.filter(p => !seen.has(p.definitionId) && seen.add(p.definitionId)).slice(0, 15);
-      if (!list.length) return toast('All tradeables are priced');
-      stopPricing = false;
-      await busy('Checking prices…', async () => {
-        for (let i = 0; i < list.length && !stopPricing; i++) {
-          ui.busy = `Checking prices… ${i + 1}/${list.length} (${list[i].name})`; render();
-          await marketPrice(list[i].definitionId);
-        }
-      });
-      log(`Priced ${list.length} players.`, 'good');
+    stop() {
+      runTok++; busyId++;
+      ui.busy = ''; ui.stoppable = false; render();
+      toast('Stopped');
     },
     smartRelist() {
       const ex = (ui.trades || []).filter(i => i.state === 'expired');
-      ask(`Check live prices for ${ex.length} expired items and relist each at the market price? This uses up to ${ex.length * 3} market searches.`, 'Smart relist', () => busy('Smart relisting…', async () => {
-        stopPricing = false;
+      ask(`Check live prices for all ${ex.length} expired items and relist each at the market price? This uses up to ${ex.length * 3} market searches. You can stop at any time.`, 'Relist all', () => busy('Relisting at market price…', async () => {
+        const tok = runTok;
         let done = 0, kept = 0, none = 0;
         for (const i of ex) {
-          if (stopPricing) break;
-          ui.busy = `Smart relisting… ${done + kept + none + 1}/${ex.length} (${i.name})`; render();
-          const m = await marketPrice(i.defId, FRESH);
+          checkTok(tok);
+          ui.busy = `Relisting at market price… ${done + kept + none + 1}/${ex.length} (${i.name})`; render();
+          const m = await marketPrice(i.defId, FRESH, tok);
           if (!m) { none++; continue; }
           let bin = S.undercut ? E.roundToMarket(m - E.priceStep(m), 'down') : m;
           if (S.floorBE && i.paid) bin = Math.max(bin, E.roundToMarket(Math.ceil(i.paid / 0.95), 'up'));
           bin = Math.max(200, bin);
           const start = E.roundToMarket(bin - E.priceStep(bin), 'down');
+          checkTok(tok);
           await obs(services.Item.list(i.raw, Math.max(150, start), bin, 3600));
           done++;
-          await sleep(500 + Math.random() * 600);
+          await csleep(500 + Math.random() * 600, tok);
         }
         log(`Smart relist: ${done} relisted${none ? `, ${none} had no market price (left as is)` : ''}.`, 'good');
         toast(`Relisted ${done}`);
         A.trades();
-      }));
+      }, true));
     },
     async copylog() {
       const text = S.log.map(l => `${new Date(l.at).toISOString()} [${l.kind}] ${l.msg}`).join('\n');
@@ -757,9 +851,9 @@
       mode = 'float';
     }
     if (mode) { placeHost(); render(); }
-    if (tries === 1) setTimeout(() => { loadSets().catch(() => {}); }, 1500);
+    if (!booted) { booted = true; rowStyle(); hookRows(); setTimeout(() => { loadSets().catch(() => {}); }, 1500); }
     if (mode && ready()) {
-      if (!S.club && !ui.busy && tries === 3) loadClub().catch(() => {});
+      if (!S.club && !ui.busy && !clubAuto) { clubAuto = true; loadClub().catch(() => {}); }
       backgroundPrice();
     }
     setTimeout(mount, mode === 'tab' ? 2000 : 1000);
@@ -793,6 +887,7 @@
     .limits { font-size: 13px; color: rgba(255, 255, 255, .75); background: rgba(13, 20, 32, .55); border: 1px solid rgba(255, 255, 255, .18); border-radius: 12px; padding: 9px 12px; margin-bottom: 10px; }
     .limits b { color: #fff; } .limits.bad { border-color: #ff6b6b; } .limits.bad b { color: #ff6b6b; }
     .busy { display: flex; gap: 8px; align-items: center; color: #f7d75c; font-weight: 700; margin-bottom: 10px; }
+    .busy .grow { flex: 1; min-width: 0; } .btn.stop { min-height: 36px; padding: 6px 14px; border-color: #ff6b6b; color: #ff8a8a; }
     .spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s .7s linear infinite; }
     @keyframes s { to { transform: rotate(360deg); } }
     ul { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
